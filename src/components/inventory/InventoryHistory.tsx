@@ -168,11 +168,16 @@ export default function InventoryHistory({
 
                   <td className="p-4 text-right text-slate-400">
 
-                    {item.created_at
-                      ? new Date(
-                          item.created_at
-                        ).toLocaleString()
-                      : "—"}
+{item.created_at
+  ? new Date(item.created_at).toLocaleString(
+      "en-NG",
+      {
+        timeZone: "Africa/Lagos",
+        dateStyle: "medium",
+        timeStyle: "short",
+      }
+    )
+  : "—"}
 
                   </td>
 

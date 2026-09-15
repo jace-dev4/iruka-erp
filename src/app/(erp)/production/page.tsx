@@ -66,19 +66,12 @@ export default function ProductionPage() {
   ========================== */
 
   const getLocalDate = () => {
-    const date = new Date();
-
-    const year = date.getFullYear();
-
-    const month = String(
-      date.getMonth() + 1
-    ).padStart(2, "0");
-
-    const day = String(
-      date.getDate()
-    ).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Lagos",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
   };
 
   const [selectedKpiDate, setSelectedKpiDate] =
@@ -785,9 +778,7 @@ export default function ProductionPage() {
             status: "Completed",
 
             production_date:
-              new Date()
-                .toISOString()
-                .split("T")[0],
+              getLocalDate(),
 
             received_quantity: 0,
 
@@ -1930,6 +1921,7 @@ const totalMissing =
     ).toLocaleDateString(
       "en-GB",
       {
+        timeZone: "Africa/Lagos",
         weekday: "long",
         day: "numeric",
         month: "long",
@@ -2689,6 +2681,7 @@ const totalMissing =
                 {new Date().toLocaleDateString(
                   "en-GB",
                   {
+                    timeZone: "Africa/Lagos",
                     weekday: "long",
                     day: "numeric",
                     month: "long",
@@ -3325,9 +3318,14 @@ const totalMissing =
 
                         <td className="px-6 py-5 text-center text-slate-300">
 
-                          {new Date(
-                            log.created_at
-                          ).toLocaleString()}
+                          {new Date(log.created_at).toLocaleString(
+                            "en-NG",
+                            {
+                              timeZone: "Africa/Lagos",
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            }
+                          )}
 
                         </td>
 

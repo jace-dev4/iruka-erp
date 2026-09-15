@@ -63,20 +63,21 @@ export default function InventoryMaterials({
      DATE FORMATTER
   ========================== */
 
-  function formatDate(value: any) {
-    if (!value) return "Not available";
+function formatDate(value: any) {
+  if (!value) return "Not available";
 
-    const date = new Date(value);
+  const date = new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
-      return "Not available";
-    }
-
-    return date.toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
+  if (Number.isNaN(date.getTime())) {
+    return "Not available";
   }
+
+  return date.toLocaleString("en-NG", {
+    timeZone: "Africa/Lagos",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 
   /* =========================
      SECTION COMPONENT

@@ -254,41 +254,58 @@ export default function InventoryPage() {
     }
   }
 
-  /* =========================
-     LOW STOCK CHECKER
-  ========================== */
+/* =========================
+   LOW STOCK CHECKER
+========================== */
 
-  function isLowStock(item: any) {
-    if (
-      item.name === "Flour" &&
-      Number(item.quantity) < 400
-    ) {
-      return true;
-    }
+function isLowStock(item: any) {
+  const quantity = Number(item.quantity || 0);
 
-    if (
-      item.name === "Sugar" &&
-      Number(item.quantity) < 50
-    ) {
-      return true;
-    }
+  const lowStockThresholds: Record<string, number> = {
+    /* Production Ingredients */
+    Flour: 400,
+    Sugar: 50,
+    Yeast: 10,
+    Butter: 10,
+    "Groundnut Oil": 5,
 
-    if (
-      item.name === "Yeast" &&
-      Number(item.quantity) < 10
-    ) {
-      return true;
-    }
+    /* Recipe Materials */
+    "Iruka Recipe": 10,
+    "White Recipe": 10,
+    "Fruits Recipe": 10,
 
-    if (
-      item.name === "Butter" &&
-      Number(item.quantity) < 10
-    ) {
-      return true;
-    }
+    /* Nylon Packaging */
+    "Small Iruka Nylon": 1000,
+    "Small Rosy Nylon": 1000,
+    "Medium Iruka Nylon": 1000,
+    "Medium Rosy Nylon": 1000,
+    "Big Smart Nylon": 1000,
+    "Classic Iruka Nylon": 1000,
+    "Classic Fruits Nylon": 1000,
+    "Jumbo Iruka Nylon": 1000,
+    "Jumbo Fruits Nylon": 1000,
+    "Big Brother Family Nylon": 1000,
 
+    /* Other Packaging */
+    Tape: 100,
+    Twist: 2,
+
+    /* Bakery Additives */
+    Brown: 5,
+    Resins: 1,
+    Flavour: 1,
+  };
+
+  const threshold = lowStockThresholds[item.name];
+
+  // If the material is not defined above,
+  // keep the existing healthy state.
+  if (threshold === undefined) {
     return false;
   }
+
+  return quantity < threshold;
+}
 
   /* =========================
      TOTAL MATERIALS
@@ -398,15 +415,16 @@ export default function InventoryPage() {
 
                   <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-800/80 px-4 py-1.5 text-sm text-slate-300">
                     📅{" "}
-                    {new Date().toLocaleDateString(
-                      "en-GB",
-                      {
-                        weekday: "long",
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      }
-                    )}
+{new Date().toLocaleDateString(
+  "en-GB",
+  {
+    timeZone: "Africa/Lagos",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }
+)}
                   </span>
 
                 </div>

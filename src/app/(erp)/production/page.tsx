@@ -1993,12 +1993,7 @@ const totalMissing =
 
   return (
 
-    <ProtectedRoute
-      allowedRoles={[
-        "admin",
-        "accountant",
-      ]}
-    >
+<ProtectedRoute allowedRoles={["admin", "accountant"]}>
 
       <div className="min-h-screen bg-[#08111f] -m-6 p-8">
 

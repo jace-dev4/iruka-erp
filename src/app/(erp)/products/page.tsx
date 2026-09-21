@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -178,25 +179,16 @@ useEffect(() => {
         LOADING
   ============================ */
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#08111f] flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-14 h-14 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto" />
 
-          <p className="mt-6 text-slate-300 text-lg font-medium">
-            Loading Products...
-          </p>
 
-          <p className="text-slate-500 mt-2">
-            Preparing your product inventory
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
+return (
+  <ProtectedRoute
+    allowedRoles={[
+      "admin",
+      "accountant",
+      "cashier",
+    ]}
+  >
     <div className="min-h-screen bg-[#08111f] -m-6 p-6 md:p-8">
 
       {/* =====================================================
@@ -294,6 +286,7 @@ useEffect(() => {
 
       </div>
 
+
       {/* =====================================================
             KPI CARDS
       ===================================================== */}
@@ -335,6 +328,7 @@ useEffect(() => {
 
         </div>
 
+
         {/* TOTAL STOCK */}
 
         <div className="rounded-3xl border border-slate-700 bg-slate-900/80 p-6 shadow-xl">
@@ -370,6 +364,7 @@ useEffect(() => {
 
         </div>
 
+
         {/* INVENTORY VALUE */}
 
         <div className="rounded-3xl border border-slate-700 bg-slate-900/80 p-6 shadow-xl">
@@ -404,6 +399,7 @@ useEffect(() => {
           </div>
 
         </div>
+
 
         {/* LOW STOCK */}
 
@@ -441,6 +437,7 @@ useEffect(() => {
         </div>
 
       </div>
+
 
       {/* =====================================================
             SEARCH
@@ -486,6 +483,7 @@ useEffect(() => {
 
       </div>
 
+
       {/* =====================================================
             PRODUCT TABLE
       ===================================================== */}
@@ -516,6 +514,7 @@ useEffect(() => {
           )}
 
         </div>
+
 
         <div className="overflow-x-auto">
 
@@ -553,6 +552,7 @@ useEffect(() => {
 
             </thead>
 
+
             <tbody>
 
               {filteredProducts.map((product) => {
@@ -562,13 +562,13 @@ useEffect(() => {
 
                 return (
 
-<tr
-  key={product.id}
-  onClick={() =>
-    router.push(
-      `/products/${product.id}?from=products`
-    )
-  }
+                  <tr
+                    key={product.id}
+                    onClick={() =>
+                      router.push(
+                        `/products/${product.id}?from=products`
+                      )
+                    }
                     className="group border-b border-slate-800 hover:bg-slate-800/50 transition cursor-pointer"
                   >
 
@@ -616,6 +616,7 @@ useEffect(() => {
 
                     </td>
 
+
                     {/* SKU */}
 
                     <td className="px-7 py-6">
@@ -625,6 +626,7 @@ useEffect(() => {
                       </span>
 
                     </td>
+
 
                     {/* STOCK */}
 
@@ -646,6 +648,7 @@ useEffect(() => {
 
                     </td>
 
+
                     {/* PRICE */}
 
                     <td className="px-7 py-6">
@@ -658,6 +661,7 @@ useEffect(() => {
                       </span>
 
                     </td>
+
 
                     {/* STATUS */}
 
@@ -677,18 +681,19 @@ useEffect(() => {
 
                     </td>
 
+
                     {/* ACTION */}
 
                     <td className="px-7 py-6 text-right">
 
-<button
-  onClick={(event) => {
-    event.stopPropagation();
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
 
-    router.push(
-      `/products/${product.id}?from=products`
-    );
-  }}
+                          router.push(
+                            `/products/${product.id}?from=products`
+                          );
+                        }}
                         className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 px-4 py-3 text-sm font-bold text-white transition"
                       >
 
@@ -706,6 +711,7 @@ useEffect(() => {
 
                 );
               })}
+
 
               {/* EMPTY */}
 
@@ -763,5 +769,6 @@ useEffect(() => {
       </div>
 
     </div>
-  );
+  </ProtectedRoute>
+);
 }

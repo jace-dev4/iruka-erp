@@ -106,30 +106,30 @@ export default function LoginPage() {
         userData.email
       );
 
-      switch (userData.role) {
-        case "admin":
-          router.push("/dashboard");
-          break;
+switch (userData.role) {
+  case "admin":
+    router.push("/dashboard");
+    break;
 
-        case "cashier":
-          router.push("/orders");
-          break;
+  case "cashier":
+    router.push("/orders");
+    break;
 
-        case "production":
-          router.push("/production");
-          break;
+  case "management":
+    router.push("/staff");
+    break;
 
-        case "inventory officer":
-          router.push("/inventory");
-          break;
+  case "inventory officer":
+    router.push("/inventory");
+    break;
 
-        case "accountant":
-          router.push("/finance");
-          break;
+  case "accountant":
+    router.push("/finance");
+    break;
 
-        default:
-          router.push("/dashboard");
-      }
+  default:
+    router.push("/dashboard");
+}
     } catch (err) {
       console.error(err);
 

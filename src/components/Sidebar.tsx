@@ -34,40 +34,40 @@ const menuByRole = {
       icon: LayoutDashboard,
     },
     {
-  name: "Customer Orders",
-  href: "/orders",
-  icon: ShoppingCart,
-},
-{
-  name: "Customers",
-  href: "/customers",
-  icon: Users,
-},
+      name: "Customer Orders",
+      href: "/orders",
+      icon: ShoppingCart,
+    },
+    {
+      name: "Customers",
+      href: "/customers",
+      icon: Users,
+    },
     {
       name: "Production",
       href: "/production",
       icon: Factory,
     },
-{
-  name: "Inventory",
-  href: "/inventory",
-  icon: Boxes,
-},
-{
-  name: "Products",
-  href: "/products",
-  icon: Package,
-},
-{
-  name: "Finance",
-  href: "/finance",
-  icon: Receipt,
-},
-{
-  name: "Debtors",
-  href: "/debtors",
-  icon: Wallet,
-},
+    {
+      name: "Inventory",
+      href: "/inventory",
+      icon: Boxes,
+    },
+    {
+      name: "Products",
+      href: "/products",
+      icon: Package,
+    },
+    {
+      name: "Finance",
+      href: "/finance",
+      icon: Receipt,
+    },
+    {
+      name: "Debtors",
+      href: "/debtors",
+      icon: Wallet,
+    },
     {
       name: "Analytics",
       href: "/analytics",
@@ -79,10 +79,10 @@ const menuByRole = {
       icon: Users,
     },
     {
-  name: "Payroll",
-  href: "/payroll",
-  icon: Wallet,
-},
+      name: "Payroll",
+      href: "/payroll",
+      icon: Wallet,
+    },
     {
       name: "Settings",
       href: "/settings",
@@ -90,7 +90,7 @@ const menuByRole = {
     },
   ],
 
-  inventory: [
+  "inventory officer": [
     {
       name: "Inventory",
       href: "/inventory",
@@ -98,28 +98,32 @@ const menuByRole = {
     },
   ],
 
-  cashier: [
-    {
-      name: "Orders",
-      href: "/orders",
-      icon: ShoppingCart,
-    },
-    {
-      name: "Sales",
-      href: "/sales",
-      icon: Wallet,
-    },
-  ],
+cashier: [
+  { name: "Customer Orders", href: "/orders", icon: ShoppingCart },
+  { name: "Customers", href: "/customers", icon: Users },
+  { name: "Debtors", href: "/debtors", icon: Wallet },
+  { name: "Products", href: "/products", icon: Package },
+],
 
-  production: [
+management: [
+  {
+    name: "Staff",
+    href: "/staff",
+    icon: Users,
+  },
+],
+
+  accountant: [
     {
       name: "Production",
       href: "/production",
       icon: Factory,
     },
-  ],
-
-  accountant: [
+    {
+      name: "Products",
+      href: "/products",
+      icon: Package,
+    },
     {
       name: "Finance",
       href: "/finance",

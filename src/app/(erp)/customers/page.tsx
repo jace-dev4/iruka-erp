@@ -872,9 +872,12 @@ console.log("================================");
   ========================================================== */
 
   return (
-    <ProtectedRoute
-      allowedRoles={["admin"]}
-    >
+<ProtectedRoute
+  allowedRoles={[
+    "admin",
+    "cashier",
+  ]}
+>
       <div className="min-h-screen bg-[#08111f] -m-6 p-8">
 
         {/* ==================================================

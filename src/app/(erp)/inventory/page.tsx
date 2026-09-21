@@ -318,12 +318,12 @@ function isLowStock(item: any) {
   ).length;
 
   return (
-    <ProtectedRoute
-      allowedRoles={[
-        "admin",
-        "inventory",
-      ]}
-    >
+<ProtectedRoute
+  allowedRoles={[
+    "admin",
+    "inventory officer",
+  ]}
+>
       <div className="min-h-screen p-6 lg:p-10 bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 text-white">
 
         {/* =========================

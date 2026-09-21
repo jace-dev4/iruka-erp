@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import {
   Users,
   Wallet,
@@ -333,8 +334,14 @@ const filteredDebtors = useMemo(() => {
     );
   });
 }, [debtors, search]);
-  return (
-<div className="space-y-8">
+return (
+  <ProtectedRoute
+    allowedRoles={[
+      "admin",
+      "cashier",
+    ]}
+  >
+    <div className="space-y-8">
 
 
 {/* ==========================
@@ -1290,10 +1297,10 @@ const filteredDebtors = useMemo(() => {
 
 )}
 
+    </div>
 
-</div>
+  </div>
 
-</div>
-
+  </ProtectedRoute>
 );
 }

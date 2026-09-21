@@ -4,17 +4,23 @@ import { createClient } from "@supabase/supabase-js";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
     const staffId = body?.staffId;
 
     if (!staffId) {
       return NextResponse.json(
-        { error: "Staff ID is required." },
+        {
+          error: "Staff ID is required.",
+        },
         { status: 400 }
       );
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const serviceRoleKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
       return NextResponse.json(
@@ -37,38 +43,60 @@ export async function POST(request: Request) {
       }
     );
 
+    /* =====================================================
+       1. GET STAFF RECORD
+    ===================================================== */
+
     const {
       data: staffMember,
       error: staffFetchError,
     } = await supabaseAdmin
       .from("staff")
       .select(
-        "id, staff_id, full_name, erp_user, erp_email, erp_role"
+        `
+          id,
+          staff_id,
+          full_name,
+          erp_user,
+          erp_email,
+          erp_role
+        `
       )
       .eq("staff_id", staffId)
       .maybeSingle();
 
     if (staffFetchError) {
-      console.error("Staff lookup error:", staffFetchError);
+      console.error(
+        "Staff lookup error:",
+        staffFetchError
+      );
 
       return NextResponse.json(
-        { error: staffFetchError.message },
+        {
+          error: staffFetchError.message,
+        },
         { status: 500 }
       );
     }
 
     if (!staffMember) {
       return NextResponse.json(
-        { error: "Staff member not found." },
+        {
+          error: "Staff member not found.",
+        },
         { status: 404 }
       );
     }
 
-    /*
-     * NEVER remove the System Admin account.
-     */
-    const role = staffMember.erp_role?.toLowerCase();
-    const email = staffMember.erp_email?.toLowerCase();
+    /* =====================================================
+       2. NEVER REMOVE SYSTEM ADMIN
+    ===================================================== */
+
+    const role =
+      staffMember.erp_role?.toLowerCase();
+
+    const email =
+      staffMember.erp_email?.toLowerCase();
 
     if (
       role === "admin" ||
@@ -84,21 +112,75 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Find and delete the Supabase Auth account.
-     */
+    /* =====================================================
+       3. FIND ERP USER IN public.users
+    ===================================================== */
+
+    let erpUserRecord: {
+      id: string;
+      email: string | null;
+      full_name: string | null;
+      role: string | null;
+    } | null = null;
+
     if (staffMember.erp_email) {
-      let authUserId: string | null = null;
+      const {
+        data: userRecord,
+        error: userLookupError,
+      } = await supabaseAdmin
+        .from("users")
+        .select(
+          `
+            id,
+            email,
+            full_name,
+            role
+          `
+        )
+        .eq(
+          "email",
+          staffMember.erp_email
+        )
+        .maybeSingle();
+
+      if (userLookupError) {
+        console.error(
+          "ERP users lookup error:",
+          userLookupError
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              userLookupError.message ||
+              "Unable to find ERP user record.",
+          },
+          { status: 500 }
+        );
+      }
+
+      erpUserRecord =
+        userRecord || null;
+    }
+
+    /* =====================================================
+       4. FIND SUPABASE AUTH USER
+    ===================================================== */
+
+    let authUserId: string | null = null;
+
+    if (staffMember.erp_email) {
       let page = 1;
 
       while (!authUserId) {
         const {
           data: authUsers,
           error: authUsersError,
-        } = await supabaseAdmin.auth.admin.listUsers({
-          page,
-          perPage: 1000,
-        });
+        } =
+          await supabaseAdmin.auth.admin.listUsers({
+            page,
+            perPage: 1000,
+          });
 
         if (authUsersError) {
           console.error(
@@ -116,14 +198,17 @@ export async function POST(request: Request) {
           );
         }
 
-        const matchingUser = authUsers?.users?.find(
-          (user) =>
-            user.email?.toLowerCase() ===
-            staffMember.erp_email?.toLowerCase()
-        );
+        const matchingUser =
+          authUsers?.users?.find(
+            (user) =>
+              user.email?.toLowerCase() ===
+              staffMember.erp_email?.toLowerCase()
+          );
 
         if (matchingUser) {
-          authUserId = matchingUser.id;
+          authUserId =
+            matchingUser.id;
+
           break;
         }
 
@@ -136,59 +221,104 @@ export async function POST(request: Request) {
 
         page++;
       }
+    }
 
-      if (authUserId) {
-        /*
-         * Extra protection for the System Admin.
-         */
-        const ADMIN_AUTH_ID =
-          "ec973a6e-c170-43f0-b2cb-f0bd37167644";
+    /* =====================================================
+       5. NEVER DELETE SYSTEM ADMIN AUTH ACCOUNT
+    ===================================================== */
 
-        if (authUserId === ADMIN_AUTH_ID) {
-          return NextResponse.json(
-            {
-              error:
-                "The System Admin account cannot be removed.",
-            },
-            { status: 403 }
-          );
-        }
+    const ADMIN_AUTH_ID =
+      "ec973a6e-c170-43f0-b2cb-f0bd37167644";
 
-        const { error: deleteAuthError } =
-          await supabaseAdmin.auth.admin.deleteUser(
-            authUserId
-          );
+    if (authUserId === ADMIN_AUTH_ID) {
+      return NextResponse.json(
+        {
+          error:
+            "The System Admin account cannot be removed.",
+        },
+        { status: 403 }
+      );
+    }
 
-        if (deleteAuthError) {
-          console.error(
-            "Auth user deletion error:",
-            deleteAuthError
-          );
+    /* =====================================================
+       6. DELETE public.users RECORD
+    ===================================================== */
 
-          return NextResponse.json(
-            {
-              error:
-                deleteAuthError.message ||
-                "Unable to remove ERP login.",
-            },
-            { status: 500 }
-          );
-        }
+    if (erpUserRecord?.id) {
+      const {
+        error: deleteUserError,
+      } = await supabaseAdmin
+        .from("users")
+        .delete()
+        .eq(
+          "id",
+          erpUserRecord.id
+        );
+
+      if (deleteUserError) {
+        console.error(
+          "ERP users deletion error:",
+          deleteUserError
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              deleteUserError.message ||
+              "Unable to remove ERP user record.",
+          },
+          { status: 500 }
+        );
       }
     }
 
-    /*
-     * Clear ERP access from the staff record.
-     */
-    const { error: staffUpdateError } =
-      await supabaseAdmin
-        .from("staff")
-        .update({
-          erp_user: false,
-          erp_email: null,
-          erp_role: null,
-        })
-        .eq("staff_id", staffId);
+    /* =====================================================
+       7. DELETE SUPABASE AUTH ACCOUNT
+    ===================================================== */
+
+    if (authUserId) {
+      const {
+        error: deleteAuthError,
+      } =
+        await supabaseAdmin.auth.admin.deleteUser(
+          authUserId
+        );
+
+      if (deleteAuthError) {
+        console.error(
+          "Auth user deletion error:",
+          deleteAuthError
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              deleteAuthError.message ||
+              "ERP user record was removed, but the login account could not be deleted.",
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    /* =====================================================
+       8. REMOVE ERP ACCESS FROM STAFF RECORD
+       STAFF RECORD ITSELF IS NOT DELETED
+    ===================================================== */
+
+    const {
+      error: staffUpdateError,
+    } = await supabaseAdmin
+      .from("staff")
+      .update({
+        erp_user: false,
+        erp_email: null,
+        erp_role: null,
+      })
+      .eq(
+        "staff_id",
+        staffId
+      );
 
     if (staffUpdateError) {
       console.error(
@@ -200,17 +330,21 @@ export async function POST(request: Request) {
         {
           error:
             staffUpdateError.message ||
-            "ERP login was removed, but staff ERP information could not be cleared.",
+            "ERP account was removed, but staff ERP information could not be cleared.",
         },
         { status: 500 }
       );
     }
 
+    /* =====================================================
+       9. SUCCESS
+    ===================================================== */
+
     return NextResponse.json(
       {
         success: true,
         message:
-          `${staffMember.full_name} has been removed from ERP access.`,
+          `${staffMember.full_name} has been completely removed from ERP access.`,
       },
       { status: 200 }
     );

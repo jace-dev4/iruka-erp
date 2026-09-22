@@ -22,9 +22,17 @@ import {
   Calculator,
   AlertTriangle,
   Database,
+  CircleDollarSign,
+  Target,
+  Activity,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 type SettingsData = {
   company_name: string;
@@ -48,8 +56,12 @@ type SettingsData = {
   email_notifications: boolean;
 };
 
+/* =========================================================
+   DEFAULT SETTINGS
+========================================================= */
+
 const DEFAULT_SETTINGS: SettingsData = {
-  company_name: "NKIRUKA INDUSTRIES LTD",
+  company_name: "Nkiruka/iruka industries ltd",
   company_address: "",
   company_phone: "",
   company_email: "",
@@ -70,11 +82,15 @@ const DEFAULT_SETTINGS: SettingsData = {
   email_notifications: false,
 };
 
+/* =========================================================
+   NAVIGATION
+========================================================= */
+
 const NAV_ITEMS = [
   {
     id: "general",
     label: "General",
-    description: "Company information",
+    description: "Company profile",
     icon: Building2,
   },
   {
@@ -103,6 +119,10 @@ const NAV_ITEMS = [
   },
 ];
 
+/* =========================================================
+   MAIN PAGE
+========================================================= */
+
 export default function SettingsPage() {
   const [settings, setSettings] =
     useState<SettingsData>(DEFAULT_SETTINGS);
@@ -114,9 +134,17 @@ export default function SettingsPage() {
   const [activeSection, setActiveSection] =
     useState("general");
 
+  /* =======================================================
+     INITIAL LOAD
+  ======================================================= */
+
   useEffect(() => {
     loadSettings();
   }, []);
+
+  /* =======================================================
+     LOAD SETTINGS
+  ======================================================= */
 
   async function loadSettings() {
     setLoading(true);
@@ -209,6 +237,10 @@ export default function SettingsPage() {
       setLoading(false);
     }
   }
+
+  /* =======================================================
+     SAVE SETTINGS
+  ======================================================= */
 
   async function saveSettings() {
     setSaving(true);
@@ -303,6 +335,10 @@ export default function SettingsPage() {
     }
   }
 
+  /* =======================================================
+     UPDATE FIELD
+  ======================================================= */
+
   function updateSetting(
     key: keyof SettingsData,
     value: string | boolean
@@ -313,88 +349,141 @@ export default function SettingsPage() {
     }));
   }
 
+  /* =======================================================
+     LOADING SCREEN
+  ======================================================= */
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#050B14] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-5">
-          <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-400/20 flex items-center justify-center">
+      <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-white">
+        <div className="flex flex-col items-center">
+          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/10">
+            <div className="absolute inset-0 rounded-2xl bg-blue-500/10 blur-xl" />
+
             <RefreshCw
-              size={25}
-              className="text-blue-400 animate-spin"
+              size={26}
+              className="relative text-blue-400 animate-spin"
             />
           </div>
 
-          <div className="text-center">
-            <p className="text-white font-bold">
-              Loading Settings
-            </p>
+          <h2 className="mt-5 text-lg font-black">
+            Loading Settings
+          </h2>
 
-            <p className="text-slate-500 text-sm mt-1">
-              Preparing your ERP configuration...
-            </p>
-          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            Preparing your ERP configuration...
+          </p>
         </div>
       </div>
     );
   }
 
+  /* =======================================================
+     PAGE
+  ======================================================= */
+
   return (
     <div className="min-h-screen bg-[#050B14] text-white">
 
-      {/* TOP HEADER */}
-      <div className="border-b border-white/[0.06] bg-[#07101D]/90 backdrop-blur-xl sticky top-0 z-40">
+      {/* ===================================================
+          PREMIUM HEADER
+      =================================================== */}
 
-        <div className="px-5 lg:px-8 py-5">
+      <header className="relative overflow-hidden border-b border-white/[0.06] bg-[#07101D]">
 
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+        {/* Background effects */}
 
-            <div className="flex items-center gap-4">
+        <div className="absolute -right-32 -top-40 h-96 w-96 rounded-full bg-blue-600/10 blur-3xl" />
 
-              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-400/20 flex items-center justify-center">
+        <div className="absolute -left-40 bottom-[-180px] h-96 w-96 rounded-full bg-amber-500/[0.05] blur-3xl" />
+
+        <div className="relative mx-auto max-w-[1550px] px-5 py-7 lg:px-8 lg:py-9">
+
+          <div className="flex flex-col gap-7 xl:flex-row xl:items-center xl:justify-between">
+
+            {/* LEFT */}
+
+            <div className="flex items-start gap-5">
+
+              <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-blue-400/20 bg-gradient-to-br from-blue-500/20 to-blue-500/5 shadow-xl shadow-blue-950/20">
+
+                <div className="absolute inset-0 rounded-2xl bg-blue-500/10 blur-lg" />
+
                 <Settings2
-                  size={23}
-                  className="text-blue-400"
+                  size={25}
+                  className="relative text-blue-400"
                 />
+
               </div>
 
               <div>
-                <div className="flex items-center gap-2">
 
-                  <h1 className="text-xl lg:text-2xl font-black tracking-tight">
-                    System Settings
-                  </h1>
+                <div className="mb-2 flex flex-wrap items-center gap-3">
 
-                  <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span className="inline-flex items-center rounded-full border border-blue-400/20 bg-blue-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-blue-300">
+                    System Control Center
+                  </span>
+
+                  <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+
                     System Active
+
                   </span>
 
                 </div>
 
-                <p className="text-slate-500 text-sm mt-1">
-                  Configure your NKIRUKA ERP environment
+                <h1 className="text-3xl font-black tracking-tight text-white md:text-4xl">
+                  System Settings
+                </h1>
+
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400 md:text-base">
+                  Configure your company profile, production,
+                  inventory, finance and ERP notification
+                  preferences.
                 </p>
+
               </div>
 
             </div>
 
-            <div className="flex items-center gap-3">
+            {/* RIGHT */}
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+
+              <div className="hidden rounded-2xl border border-white/[0.07] bg-white/[0.025] px-5 py-3 sm:block">
+
+                <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-600">
+                  Current Company
+                </p>
+
+                <p className="mt-1 max-w-[220px] truncate text-sm font-bold text-slate-200">
+                  {settings.company_name ||
+                    "Nkiruka/iruka industries ltd"}
+                </p>
+
+              </div>
 
               <button
                 onClick={loadSettings}
                 disabled={saving}
-                className="h-11 px-4 rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] text-slate-300 hover:text-white transition flex items-center gap-2 text-sm font-semibold"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-5 text-sm font-bold text-slate-300 shadow-lg transition hover:border-white/[0.14] hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <RefreshCw size={16} />
-                <span className="hidden sm:inline">
-                  Reload
-                </span>
+                <RefreshCw
+                  size={16}
+                  className={
+                    saving ? "animate-spin" : ""
+                  }
+                />
+
+                Reload
               </button>
 
               <button
                 onClick={saveSettings}
                 disabled={saving}
-                className="h-11 px-5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 shadow-lg shadow-blue-900/20 transition flex items-center gap-2 text-sm font-bold"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 px-6 text-sm font-black text-white shadow-xl shadow-blue-950/30 transition hover:-translate-y-0.5 hover:from-blue-500 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? (
                   <>
@@ -402,11 +491,13 @@ export default function SettingsPage() {
                       size={16}
                       className="animate-spin"
                     />
+
                     Saving...
                   </>
                 ) : (
                   <>
                     <Save size={16} />
+
                     Save Changes
                   </>
                 )}
@@ -416,51 +507,90 @@ export default function SettingsPage() {
 
           </div>
 
+          {/* SAVED MESSAGE */}
+
           {saved && (
-            <div className="mt-4 flex items-center gap-3 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.07] px-4 py-3">
-              <CheckCircle2
-                size={18}
-                className="text-emerald-400"
-              />
+            <div className="mt-6 flex items-center gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] px-5 py-4 shadow-lg shadow-emerald-950/10">
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10">
+                <CheckCircle2
+                  size={18}
+                  className="text-emerald-400"
+                />
+              </div>
 
               <div>
-                <p className="text-sm font-bold text-emerald-300">
+
+                <p className="text-sm font-black text-emerald-300">
                   Settings saved successfully
                 </p>
 
-                <p className="text-xs text-emerald-400/60">
+                <p className="mt-0.5 text-xs text-emerald-400/60">
                   Your ERP configuration has been updated.
                 </p>
+
               </div>
+
             </div>
           )}
 
         </div>
-      </div>
+
+      </header>
 
 
-      {/* MAIN CONTENT */}
-      <div className="max-w-[1500px] mx-auto p-5 lg:p-8">
+      {/* ===================================================
+          MAIN CONTENT
+      =================================================== */}
 
-        <div className="grid lg:grid-cols-[250px_1fr] gap-7">
+      <main className="mx-auto max-w-[1550px] px-5 py-7 lg:px-8 lg:py-9">
 
-          {/* SIDEBAR */}
-          <aside className="lg:sticky lg:top-[105px] lg:self-start">
+        <div className="grid gap-7 xl:grid-cols-[270px_minmax(0,1fr)]">
 
-            <div className="rounded-2xl border border-white/[0.07] bg-[#091321] p-2">
+          {/* =================================================
+              SIDEBAR
+          ================================================= */}
 
-              <div className="px-3 py-3 mb-1">
+          <aside className="xl:sticky xl:top-6 xl:self-start">
 
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-600">
-                  Configuration
-                </p>
+            <div className="overflow-hidden rounded-3xl border border-white/[0.07] bg-[#091321] shadow-2xl shadow-black/20">
+
+              {/* Sidebar heading */}
+
+              <div className="border-b border-white/[0.06] px-5 py-5">
+
+                <div className="flex items-center gap-3">
+
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-blue-400/10 bg-blue-500/10">
+                    <SlidersHorizontal
+                      size={18}
+                      className="text-blue-400"
+                    />
+                  </div>
+
+                  <div>
+
+                    <p className="text-xs font-black uppercase tracking-[0.15em] text-white">
+                      Configuration
+                    </p>
+
+                    <p className="mt-1 text-[11px] text-slate-600">
+                      ERP preferences
+                    </p>
+
+                  </div>
+
+                </div>
 
               </div>
 
-              <div className="space-y-1">
+              {/* Navigation */}
+
+              <div className="p-2.5">
 
                 {NAV_ITEMS.map((item) => {
                   const Icon = item.icon;
+
                   const active =
                     activeSection === item.id;
 
@@ -470,36 +600,40 @@ export default function SettingsPage() {
                       onClick={() =>
                         setActiveSection(item.id)
                       }
-                      className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition group ${
+                      className={`group relative mb-1.5 flex w-full items-center gap-3 overflow-hidden rounded-2xl border px-3.5 py-3.5 text-left transition-all ${
                         active
-                          ? "bg-blue-500/10 border border-blue-400/10"
-                          : "hover:bg-white/[0.03] border border-transparent"
+                          ? "border-blue-400/15 bg-blue-500/[0.09]"
+                          : "border-transparent hover:border-white/[0.05] hover:bg-white/[0.025]"
                       }`}
                     >
 
+                      {active && (
+                        <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.7)]" />
+                      )}
+
                       <div
-                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
                           active
                             ? "bg-blue-500/15 text-blue-400"
-                            : "bg-white/[0.03] text-slate-500 group-hover:text-slate-300"
+                            : "bg-white/[0.03] text-slate-600 group-hover:text-slate-300"
                         }`}
                       >
-                        <Icon size={17} />
+                        <Icon size={18} />
                       </div>
 
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0 flex-1">
 
                         <p
-                          className={`text-sm font-bold ${
+                          className={`text-sm font-black ${
                             active
                               ? "text-white"
-                              : "text-slate-400 group-hover:text-white"
+                              : "text-slate-400 group-hover:text-slate-200"
                           }`}
                         >
                           {item.label}
                         </p>
 
-                        <p className="text-[11px] text-slate-600 mt-0.5 truncate">
+                        <p className="mt-0.5 truncate text-[10px] text-slate-600">
                           {item.description}
                         </p>
 
@@ -507,8 +641,8 @@ export default function SettingsPage() {
 
                       {active && (
                         <ChevronRight
-                          size={15}
-                          className="text-blue-400"
+                          size={16}
+                          className="shrink-0 text-blue-400"
                         />
                       )}
 
@@ -521,41 +655,47 @@ export default function SettingsPage() {
             </div>
 
 
-            {/* SYSTEM STATUS */}
-            <div className="mt-4 rounded-2xl border border-white/[0.07] bg-[#091321] p-4">
+            {/* SYSTEM CONNECTION */}
+
+            <div className="mt-5 overflow-hidden rounded-3xl border border-white/[0.07] bg-[#091321] p-5 shadow-xl shadow-black/10">
 
               <div className="flex items-center gap-3">
 
-                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
                   <ShieldCheck
-                    size={17}
+                    size={18}
                     className="text-emerald-400"
                   />
                 </div>
 
                 <div>
-                  <p className="text-xs font-bold text-white">
-                    ERP Configuration
+
+                  <p className="text-xs font-black text-white">
+                    ERP Connection
                   </p>
 
-                  <p className="text-[11px] text-slate-600 mt-0.5">
-                    Connected to Supabase
+                  <p className="mt-0.5 text-[10px] text-slate-600">
+                    Supabase database
                   </p>
+
                 </div>
 
               </div>
 
-              <div className="mt-4 h-px bg-white/[0.05]" />
+              <div className="my-4 h-px bg-white/[0.05]" />
 
-              <div className="flex items-center justify-between mt-3">
+              <div className="flex items-center justify-between">
 
                 <span className="text-[11px] text-slate-500">
                   Database
                 </span>
 
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/15 bg-emerald-400/[0.05] px-2.5 py-1 text-[10px] font-bold text-emerald-400">
+
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+
                   Connected
+
                 </span>
 
               </div>
@@ -565,19 +705,24 @@ export default function SettingsPage() {
           </aside>
 
 
-          {/* SETTINGS AREA */}
-          <main className="space-y-6">
+          {/* =================================================
+              SETTINGS CONTENT
+          ================================================= */}
+
+          <section className="min-w-0 space-y-6">
 
             {/* GENERAL */}
+
             {activeSection === "general" && (
               <SettingsSection
                 icon={<Building2 size={21} />}
+                iconClass="blue"
                 eyebrow="GENERAL CONFIGURATION"
                 title="Company Profile"
-                description="Manage the identity and contact information displayed across your ERP."
+                description="Manage the identity and contact information used throughout your ERP."
               >
 
-                <div className="grid md:grid-cols-2 gap-5">
+                <div className="grid gap-5 md:grid-cols-2">
 
                   <InputField
                     label="Company Name"
@@ -630,6 +775,36 @@ export default function SettingsPage() {
 
                 </div>
 
+                <div className="mt-7 grid gap-4 md:grid-cols-3">
+
+                  <MiniStat
+                    icon={<Building2 size={17} />}
+                    label="Company"
+                    value={
+                      settings.company_name ||
+                      "Not configured"
+                    }
+                  />
+
+                  <MiniStat
+                    icon={<Phone size={17} />}
+                    label="Phone"
+                    value={
+                      settings.company_phone ||
+                      "Not configured"
+                    }
+                  />
+
+                  <MiniStat
+                    icon={<Mail size={17} />}
+                    label="Email"
+                    value={
+                      settings.company_email ||
+                      "Not configured"
+                    }
+                  />
+
+                </div>
 
                 <InfoBox
                   icon={<Database size={17} />}
@@ -642,15 +817,17 @@ export default function SettingsPage() {
 
 
             {/* PRODUCTION */}
+
             {activeSection === "production" && (
               <SettingsSection
                 icon={<Factory size={21} />}
+                iconClass="orange"
                 eyebrow="OPERATIONS"
                 title="Production Configuration"
                 description="Define the bakery's expected daily production capacity and shift targets."
               >
 
-                <div className="grid md:grid-cols-3 gap-5">
+                <div className="grid gap-5 md:grid-cols-3">
 
                   <NumberField
                     label="Daily Production Target"
@@ -664,7 +841,7 @@ export default function SettingsPage() {
                       )
                     }
                     suffix="bags"
-                    icon={<Factory size={16} />}
+                    icon={<Target size={16} />}
                   />
 
                   <NumberField
@@ -700,20 +877,23 @@ export default function SettingsPage() {
                 </div>
 
 
-                <div className="mt-6 grid md:grid-cols-2 gap-4">
+                <div className="mt-7 grid gap-4 md:grid-cols-2">
 
                   <MetricCard
-                    label="Morning + Night"
+                    icon={<Activity size={18} />}
+                    label="Combined Shift Target"
                     value={`${Number(
                       settings.morning_shift_target || 0
-                    ) + Number(
-                      settings.night_shift_target || 0
-                    )} bags`}
-                    description="Combined shift target"
+                    ) +
+                      Number(
+                        settings.night_shift_target || 0
+                      )} bags`}
+                    description="Morning + night production"
                   />
 
                   <MetricCard
-                    label="Target Per Shift"
+                    icon={<Target size={18} />}
+                    label="Average Per Shift"
                     value={`${Number(
                       settings.daily_production_target || 0
                     ) / 2 || 0} bags`}
@@ -725,7 +905,7 @@ export default function SettingsPage() {
 
                 <InfoBox
                   icon={<Info size={17} />}
-                  title="Targets do not replace production records"
+                  title="Production targets"
                   text="These figures define expected production levels. Actual production, flour consumption and stock movement should continue to come from production records."
                 />
 
@@ -734,19 +914,23 @@ export default function SettingsPage() {
 
 
             {/* INVENTORY */}
+
             {activeSection === "inventory" && (
               <SettingsSection
                 icon={<Boxes size={21} />}
+                iconClass="blue"
                 eyebrow="STOCK CONTROL"
                 title="Inventory Configuration"
                 description="Define the minimum stock levels used to trigger inventory warnings."
               >
 
-                <div className="grid md:grid-cols-2 gap-5">
+                <div className="grid gap-5 md:grid-cols-2">
 
                   <NumberField
                     label="Flour"
-                    value={settings.flour_low_stock}
+                    value={
+                      settings.flour_low_stock
+                    }
                     onChange={(value) =>
                       updateSetting(
                         "flour_low_stock",
@@ -759,7 +943,9 @@ export default function SettingsPage() {
 
                   <NumberField
                     label="Sugar"
-                    value={settings.sugar_low_stock}
+                    value={
+                      settings.sugar_low_stock
+                    }
                     onChange={(value) =>
                       updateSetting(
                         "sugar_low_stock",
@@ -772,7 +958,9 @@ export default function SettingsPage() {
 
                   <NumberField
                     label="Yeast"
-                    value={settings.yeast_low_stock}
+                    value={
+                      settings.yeast_low_stock
+                    }
                     onChange={(value) =>
                       updateSetting(
                         "yeast_low_stock",
@@ -785,7 +973,9 @@ export default function SettingsPage() {
 
                   <NumberField
                     label="Butter"
-                    value={settings.butter_low_stock}
+                    value={
+                      settings.butter_low_stock
+                    }
                     onChange={(value) =>
                       updateSetting(
                         "butter_low_stock",
@@ -799,27 +989,29 @@ export default function SettingsPage() {
                 </div>
 
 
-                <div className="mt-6 rounded-2xl border border-amber-400/10 bg-amber-400/[0.04] p-5">
+                <div className="mt-7 rounded-2xl border border-amber-400/15 bg-gradient-to-r from-amber-500/[0.06] to-transparent p-5">
 
-                  <div className="flex gap-3">
+                  <div className="flex items-start gap-4">
 
-                    <div className="w-9 h-9 rounded-xl bg-amber-400/10 flex items-center justify-center shrink-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/10">
                       <AlertTriangle
-                        size={17}
+                        size={18}
                         className="text-amber-400"
                       />
                     </div>
 
                     <div>
-                      <p className="text-sm font-bold text-amber-300">
+
+                      <p className="text-sm font-black text-amber-300">
                         Low-stock thresholds
                       </p>
 
-                      <p className="text-xs text-slate-500 mt-1 leading-5">
+                      <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
                         When inventory falls below these
                         configured values, the ERP can flag
                         the material as requiring attention.
                       </p>
+
                     </div>
 
                   </div>
@@ -831,15 +1023,17 @@ export default function SettingsPage() {
 
 
             {/* FINANCE */}
+
             {activeSection === "finance" && (
               <SettingsSection
                 icon={<WalletCards size={21} />}
+                iconClass="green"
                 eyebrow="FINANCIAL CONTROL"
                 title="Finance Configuration"
                 description="Set the financial preferences used across sales, payments and reports."
               >
 
-                <div className="grid md:grid-cols-2 gap-5">
+                <div className="grid gap-5 md:grid-cols-2">
 
                   <SelectField
                     label="System Currency"
@@ -902,19 +1096,21 @@ export default function SettingsPage() {
                 </div>
 
 
-                <div className="mt-6 grid md:grid-cols-2 gap-4">
+                <div className="mt-7 grid gap-4 md:grid-cols-2">
 
                   <MetricCard
+                    icon={<CircleDollarSign size={18} />}
                     label="Active Currency"
                     value={
                       settings.currency === "NGN"
                         ? "₦ NGN"
                         : settings.currency
                     }
-                    description="Used as the system financial currency"
+                    description="System financial currency"
                   />
 
                   <MetricCard
+                    icon={<CreditCard size={18} />}
                     label="Default Payment"
                     value={
                       settings.default_payment_method
@@ -936,15 +1132,17 @@ export default function SettingsPage() {
 
 
             {/* NOTIFICATIONS */}
+
             {activeSection === "notifications" && (
               <SettingsSection
                 icon={<Bell size={21} />}
+                iconClass="purple"
                 eyebrow="SYSTEM ALERTS"
                 title="Notification Settings"
                 description="Control which operational alerts are enabled for your ERP."
               >
 
-                <div className="space-y-3">
+                <div className="space-y-4">
 
                   <ToggleSetting
                     title="Low Stock Alerts"
@@ -958,9 +1156,7 @@ export default function SettingsPage() {
                         value
                       )
                     }
-                    icon={
-                      <Boxes size={18} />
-                    }
+                    icon={<Boxes size={18} />}
                   />
 
                   <ToggleSetting
@@ -975,32 +1171,30 @@ export default function SettingsPage() {
                         value
                       )
                     }
-                    icon={
-                      <Mail size={18} />
-                    }
+                    icon={<Mail size={18} />}
                   />
 
                 </div>
 
 
-                <div className="mt-6 rounded-2xl border border-blue-400/10 bg-blue-500/[0.04] p-5">
+                <div className="mt-7 rounded-2xl border border-blue-400/15 bg-gradient-to-r from-blue-500/[0.06] to-transparent p-5">
 
-                  <div className="flex gap-3">
+                  <div className="flex items-start gap-4">
 
-                    <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
                       <Bell
-                        size={17}
+                        size={18}
                         className="text-blue-400"
                       />
                     </div>
 
                     <div>
 
-                      <p className="text-sm font-bold text-blue-300">
+                      <p className="text-sm font-black text-blue-300">
                         Notification preferences
                       </p>
 
-                      <p className="text-xs text-slate-500 mt-1 leading-5">
+                      <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
                         These settings control notification
                         preferences. Actual email delivery
                         requires a configured notification
@@ -1017,102 +1211,152 @@ export default function SettingsPage() {
             )}
 
 
-            {/* BOTTOM SAVE */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-white/[0.07] bg-[#091321] p-5">
+            {/* =================================================
+                BOTTOM SAVE BAR
+            ================================================= */}
 
-              <div className="flex items-center gap-3">
+            <div className="overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-r from-[#091321] to-[#0B1727] shadow-2xl">
 
-                <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                  <ShieldCheck
-                    size={18}
-                    className="text-blue-400"
-                  />
+              <div className="flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between md:p-6">
+
+                <div className="flex items-center gap-4">
+
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-blue-400/10 bg-blue-500/10">
+                    <ShieldCheck
+                      size={19}
+                      className="text-blue-400"
+                    />
+                  </div>
+
+                  <div>
+
+                    <p className="text-sm font-black text-white">
+                      Configuration ready
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-600">
+                      Review your changes before saving them
+                      to the ERP.
+                    </p>
+
+                  </div>
+
                 </div>
 
-                <div>
-                  <p className="text-sm font-bold text-white">
-                    Configuration ready
-                  </p>
+                <button
+                  onClick={saveSettings}
+                  disabled={saving}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 px-7 text-sm font-black text-white shadow-xl shadow-blue-950/30 transition hover:-translate-y-0.5 hover:from-blue-500 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
+                >
 
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    Review your changes before saving.
-                  </p>
-                </div>
+                  {saving ? (
+                    <>
+                      <RefreshCw
+                        size={16}
+                        className="animate-spin"
+                      />
+
+                      Saving Changes...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={16} />
+
+                      Save All Settings
+                    </>
+                  )}
+
+                </button>
 
               </div>
 
-              <button
-                onClick={saveSettings}
-                disabled={saving}
-                className="h-11 px-6 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 transition flex items-center justify-center gap-2 text-sm font-bold shadow-lg shadow-blue-900/20"
-              >
-                {saving ? (
-                  <>
-                    <RefreshCw
-                      size={16}
-                      className="animate-spin"
-                    />
-                    Saving Changes...
-                  </>
-                ) : (
-                  <>
-                    <Save size={16} />
-                    Save All Settings
-                  </>
-                )}
-              </button>
-
             </div>
 
-          </main>
+          </section>
 
         </div>
 
-      </div>
+      </main>
+
     </div>
   );
 }
 
 
-/* =====================================================
+/* =========================================================
    SETTINGS SECTION
-===================================================== */
+========================================================= */
 
 function SettingsSection({
   icon,
+  iconClass,
   eyebrow,
   title,
   description,
   children,
 }: {
   icon: React.ReactNode;
+  iconClass:
+    | "blue"
+    | "orange"
+    | "green"
+    | "purple";
   eyebrow: string;
   title: string;
   description: string;
   children: React.ReactNode;
 }) {
+  const iconStyles = {
+    blue: {
+      box: "border-blue-400/15 bg-blue-500/10",
+      text: "text-blue-400",
+    },
+    orange: {
+      box: "border-orange-400/15 bg-orange-500/10",
+      text: "text-orange-400",
+    },
+    green: {
+      box: "border-emerald-400/15 bg-emerald-500/10",
+      text: "text-emerald-400",
+    },
+    purple: {
+      box: "border-purple-400/15 bg-purple-500/10",
+      text: "text-purple-400",
+    },
+  };
+
+  const style = iconStyles[iconClass];
+
   return (
-    <section className="rounded-2xl border border-white/[0.07] bg-[#091321] overflow-hidden">
+    <section className="overflow-hidden rounded-3xl border border-white/[0.07] bg-[#091321] shadow-2xl shadow-black/20">
 
-      <div className="p-6 lg:p-7 border-b border-white/[0.06]">
+      {/* Section header */}
 
-        <div className="flex items-start gap-4">
+      <div className="relative overflow-hidden border-b border-white/[0.06] p-6 lg:p-8">
 
-          <div className="w-11 h-11 rounded-xl bg-blue-500/10 border border-blue-400/10 flex items-center justify-center text-blue-400 shrink-0">
-            {icon}
+        <div className="absolute right-[-80px] top-[-100px] h-60 w-60 rounded-full bg-blue-500/[0.035] blur-3xl" />
+
+        <div className="relative flex items-start gap-4">
+
+          <div
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${style.box}`}
+          >
+            <span className={style.text}>
+              {icon}
+            </span>
           </div>
 
           <div>
 
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-400/70">
+            <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${style.text}`}>
               {eyebrow}
             </p>
 
-            <h2 className="text-xl lg:text-2xl font-black text-white mt-1">
+            <h2 className="mt-1.5 text-2xl font-black tracking-tight text-white">
               {title}
             </h2>
 
-            <p className="text-sm text-slate-500 mt-1.5 max-w-2xl leading-6">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
               {description}
             </p>
 
@@ -1122,7 +1366,9 @@ function SettingsSection({
 
       </div>
 
-      <div className="p-6 lg:p-7">
+      {/* Content */}
+
+      <div className="p-6 lg:p-8">
         {children}
       </div>
 
@@ -1131,9 +1377,9 @@ function SettingsSection({
 }
 
 
-/* =====================================================
+/* =========================================================
    INPUT FIELD
-===================================================== */
+========================================================= */
 
 function InputField({
   label,
@@ -1151,13 +1397,16 @@ function InputField({
   return (
     <div>
 
-      <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2">
+      <label className="mb-2.5 flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500">
+
         {icon && (
           <span className="text-slate-600">
             {icon}
           </span>
         )}
+
         {label}
+
       </label>
 
       <input
@@ -1166,7 +1415,7 @@ function InputField({
         onChange={(e) =>
           onChange(e.target.value)
         }
-        className="w-full h-12 rounded-xl border border-white/[0.08] bg-[#0E1A2B] px-4 text-sm text-white placeholder:text-slate-700 outline-none transition focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/[0.06] hover:border-white/[0.12]"
+        className="h-13 w-full rounded-2xl border border-white/[0.08] bg-[#0E1A2B] px-4 text-sm font-medium text-white outline-none transition placeholder:text-slate-700 hover:border-white/[0.13] focus:border-blue-500/50 focus:bg-[#101E31] focus:ring-4 focus:ring-blue-500/[0.06]"
       />
 
     </div>
@@ -1174,9 +1423,9 @@ function InputField({
 }
 
 
-/* =====================================================
+/* =========================================================
    NUMBER FIELD
-===================================================== */
+========================================================= */
 
 function NumberField({
   label,
@@ -1194,13 +1443,16 @@ function NumberField({
   return (
     <div>
 
-      <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2">
+      <label className="mb-2.5 flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500">
+
         {icon && (
           <span className="text-slate-600">
             {icon}
           </span>
         )}
+
         {label}
+
       </label>
 
       <div className="relative">
@@ -1212,10 +1464,10 @@ function NumberField({
           onChange={(e) =>
             onChange(e.target.value)
           }
-          className="w-full h-12 rounded-xl border border-white/[0.08] bg-[#0E1A2B] px-4 pr-16 text-sm text-white outline-none transition focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/[0.06] hover:border-white/[0.12]"
+          className="h-13 w-full rounded-2xl border border-white/[0.08] bg-[#0E1A2B] px-4 pr-20 text-sm font-bold text-white outline-none transition hover:border-white/[0.13] focus:border-blue-500/50 focus:bg-[#101E31] focus:ring-4 focus:ring-blue-500/[0.06]"
         />
 
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-white/[0.04] border border-white/[0.05] px-2 py-1 text-[10px] font-bold text-slate-500">
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider text-slate-500">
           {suffix}
         </span>
 
@@ -1226,9 +1478,9 @@ function NumberField({
 }
 
 
-/* =====================================================
+/* =========================================================
    SELECT FIELD
-===================================================== */
+========================================================= */
 
 function SelectField({
   label,
@@ -1249,13 +1501,16 @@ function SelectField({
   return (
     <div>
 
-      <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2">
+      <label className="mb-2.5 flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500">
+
         {icon && (
           <span className="text-slate-600">
             {icon}
           </span>
         )}
+
         {label}
+
       </label>
 
       <div className="relative">
@@ -1265,13 +1520,13 @@ function SelectField({
           onChange={(e) =>
             onChange(e.target.value)
           }
-          className="appearance-none w-full h-12 rounded-xl border border-white/[0.08] bg-[#0E1A2B] px-4 pr-10 text-sm text-white outline-none transition focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/[0.06] hover:border-white/[0.12]"
+          className="h-13 w-full appearance-none rounded-2xl border border-white/[0.08] bg-[#0E1A2B] px-4 pr-12 text-sm font-medium text-white outline-none transition hover:border-white/[0.13] focus:border-blue-500/50 focus:bg-[#101E31] focus:ring-4 focus:ring-blue-500/[0.06]"
         >
           {options.map((option) => (
             <option
               key={option.value}
               value={option.value}
-              className="bg-[#0E1A2B]"
+              className="bg-[#0E1A2B] text-white"
             >
               {option.label}
             </option>
@@ -1279,8 +1534,8 @@ function SelectField({
         </select>
 
         <ChevronRight
-          size={15}
-          className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-slate-600 pointer-events-none"
+          size={16}
+          className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-slate-600"
         />
 
       </div>
@@ -1290,9 +1545,9 @@ function SelectField({
 }
 
 
-/* =====================================================
+/* =========================================================
    TOGGLE
-===================================================== */
+========================================================= */
 
 function ToggleSetting({
   title,
@@ -1309,17 +1564,17 @@ function ToggleSetting({
 }) {
   return (
     <label
-      className={`flex items-center justify-between gap-5 rounded-2xl border p-5 cursor-pointer transition ${
+      className={`group flex cursor-pointer items-center justify-between gap-5 rounded-2xl border p-5 transition-all ${
         checked
-          ? "border-blue-400/15 bg-blue-500/[0.04]"
+          ? "border-blue-400/15 bg-blue-500/[0.045]"
           : "border-white/[0.06] bg-[#0E1A2B] hover:border-white/[0.1]"
       }`}
     >
 
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-4">
 
         <div
-          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition ${
             checked
               ? "bg-blue-500/10 text-blue-400"
               : "bg-white/[0.03] text-slate-600"
@@ -1328,13 +1583,13 @@ function ToggleSetting({
           {icon}
         </div>
 
-        <div>
+        <div className="min-w-0">
 
-          <p className="text-sm font-bold text-white">
+          <p className="text-sm font-black text-white">
             {title}
           </p>
 
-          <p className="text-xs text-slate-500 mt-1 max-w-xl leading-5">
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
             {description}
           </p>
 
@@ -1355,15 +1610,15 @@ function ToggleSetting({
         />
 
         <div
-          className={`w-12 h-6 rounded-full transition ${
+          className={`relative h-7 w-13 rounded-full border transition-all ${
             checked
-              ? "bg-blue-600"
-              : "bg-slate-700"
+              ? "border-blue-500 bg-blue-600"
+              : "border-white/[0.08] bg-slate-800"
           }`}
         >
 
           <div
-            className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-all ${
+            className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-lg transition-all ${
               checked
                 ? "left-7"
                 : "left-1"
@@ -1379,9 +1634,9 @@ function ToggleSetting({
 }
 
 
-/* =====================================================
+/* =========================================================
    INFO BOX
-===================================================== */
+========================================================= */
 
 function InfoBox({
   icon,
@@ -1393,19 +1648,19 @@ function InfoBox({
   text: string;
 }) {
   return (
-    <div className="mt-6 flex gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+    <div className="mt-7 flex gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
 
-      <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
         {icon}
       </div>
 
       <div>
 
-        <p className="text-xs font-bold text-slate-300">
+        <p className="text-xs font-black text-slate-300">
           {title}
         </p>
 
-        <p className="text-xs text-slate-600 mt-1 leading-5">
+        <p className="mt-1 text-xs leading-5 text-slate-600">
           {text}
         </p>
 
@@ -1416,33 +1671,86 @@ function InfoBox({
 }
 
 
-/* =====================================================
+/* =========================================================
    METRIC CARD
-===================================================== */
+========================================================= */
 
 function MetricCard({
+  icon,
   label,
   value,
   description,
 }: {
+  icon?: React.ReactNode;
   label: string;
   value: string;
   description: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-[#0E1A2B] p-4">
+    <div className="group rounded-2xl border border-white/[0.06] bg-[#0E1A2B] p-5 transition hover:border-white/[0.1]">
 
-      <p className="text-[10px] uppercase tracking-wider font-bold text-slate-600">
-        {label}
-      </p>
+      <div className="flex items-center justify-between">
 
-      <p className="text-lg font-black text-white mt-1">
+        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
+          {label}
+        </p>
+
+        {icon && (
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/[0.06] text-blue-400/70">
+            {icon}
+          </div>
+        )}
+
+      </div>
+
+      <p className="mt-3 text-xl font-black tracking-tight text-white">
         {value}
       </p>
 
-      <p className="text-[11px] text-slate-600 mt-1">
+      <p className="mt-1 text-[11px] leading-5 text-slate-600">
         {description}
       </p>
+
+    </div>
+  );
+}
+
+
+/* =========================================================
+   MINI STAT
+========================================================= */
+
+function MiniStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-[#0E1A2B] p-4">
+
+      <div className="flex items-center gap-3">
+
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/[0.07] text-blue-400">
+          {icon}
+        </div>
+
+        <div className="min-w-0">
+
+          <p className="text-[9px] font-black uppercase tracking-wider text-slate-600">
+            {label}
+          </p>
+
+          <p className="mt-1 truncate text-xs font-bold text-slate-300">
+            {value}
+          </p>
+
+        </div>
+
+      </div>
 
     </div>
   );

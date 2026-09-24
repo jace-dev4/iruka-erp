@@ -2484,25 +2484,21 @@ export default function StaffPage() {
 
                   <div className="flex items-center gap-6">
 
-                    <div className="h-28 w-28 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
+<div className="h-44 w-44 md:h-52 md:w-52 rounded-3xl bg-white/20 flex items-center justify-center overflow-hidden border-4 border-white/20 shadow-2xl flex-shrink-0">
 
-                      {profileStaff.photo_url ? (
-                        <img
-                          src={
-                            profileStaff.photo_url
-                          }
-                          alt={
-                            profileStaff.full_name
-                          }
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-5xl">
-                          👤
-                        </span>
-                      )}
+  {profileStaff.photo_url ? (
+    <img
+      src={profileStaff.photo_url}
+      alt={profileStaff.full_name}
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    <span className="text-7xl">
+      👤
+    </span>
+  )}
 
-                    </div>
+</div>
 
                     <div>
 

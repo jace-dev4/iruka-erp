@@ -975,28 +975,77 @@ async function generateStaffId() {
      EDIT STAFF
   ====================================================== */
 
+  /* =====================================================
+     UPDATE STAFF
+  ====================================================== */
+
   async function updateStaff() {
     if (!editingStaff) return;
 
     try {
+      setSavingStaff(true);
+
+      let cvUrl = editingStaff.cv_url || null;
+
+      /* ==========================
+         UPLOAD NEW CV IF SELECTED
+      ========================== */
+
+      if (editingStaff.new_cv_file) {
+        const cvFile =
+          editingStaff.new_cv_file as File;
+
+        const cvName =
+          `${Date.now()}-${cvFile.name}`;
+
+        const { error: cvError } =
+          await supabase.storage
+            .from("staff-cv")
+            .upload(cvName, cvFile);
+
+        if (cvError) {
+          toast.error(cvError.message);
+          return;
+        }
+
+        const { data } =
+          supabase.storage
+            .from("staff-cv")
+            .getPublicUrl(cvName);
+
+        cvUrl = data.publicUrl;
+      }
+
+      /* ==========================
+         UPDATE STAFF RECORD
+      ========================== */
+
       const { error } =
         await supabase
           .from("staff")
           .update({
             full_name:
               editingStaff.full_name,
+
             phone_number:
               editingStaff.phone_number,
+
+            gender:
+              editingStaff.gender,
+
             department:
               editingStaff.department,
+
             position:
               editingStaff.position,
+
             salary:
-              Number(
-                editingStaff.salary
-              ),
+              Number(editingStaff.salary),
+
             employment_status:
               editingStaff.employment_status,
+
+            cv_url: cvUrl,
           })
           .eq(
             "id",
@@ -1009,13 +1058,14 @@ async function generateStaffId() {
       }
 
       toast.success(
-        "Staff updated successfully."
+        "Staff information updated successfully."
       );
 
       setShowEditModal(false);
       setEditingStaff(null);
 
       await fetchData();
+
     } catch (error: any) {
       console.error(
         "Staff update error:",
@@ -1026,9 +1076,11 @@ async function generateStaffId() {
         error?.message ||
           "Unable to update staff."
       );
+
+    } finally {
+      setSavingStaff(false);
     }
   }
-
   /* =====================================================
      UPLOAD STAFF PHOTO
   ====================================================== */
@@ -3152,6 +3204,78 @@ async function generateStaffId() {
 
                   </div>
 
+                  {/* ==========================
+    CV DOCUMENT
+========================== */}
+
+<div className="mb-10 rounded-2xl border border-slate-200 bg-slate-50 p-6">
+
+  <div className="flex items-center justify-between gap-4">
+
+    <div>
+
+      <p className="text-sm font-bold text-slate-800">
+        Staff CV
+      </p>
+
+      <p className="mt-1 text-sm text-slate-500">
+        {editingStaff.cv_url
+          ? "A CV is currently attached to this staff record."
+          : "No CV has been uploaded for this staff member."}
+      </p>
+
+    </div>
+
+    {editingStaff.cv_url && (
+      <a
+        href={
+          editingStaff.cv_url
+        }
+        target="_blank"
+        rel="noopener noreferrer"
+        className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white transition-all hover:-translate-y-0.5 hover:bg-blue-800"
+      >
+        View Current CV
+      </a>
+    )}
+
+  </div>
+
+  <div className="mt-5">
+
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Replace CV
+    </label>
+
+    <input
+      type="file"
+      accept=".pdf"
+      onChange={(e) => {
+        const file =
+          e.target.files?.[0] ||
+          null;
+
+        if (file) {
+          setEditingStaff({
+            ...editingStaff,
+            new_cv_file: file,
+          });
+        }
+      }}
+      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm"
+    />
+
+    {editingStaff.new_cv_file && (
+      <p className="mt-2 text-sm font-semibold text-blue-700">
+        New CV selected:{" "}
+        {editingStaff.new_cv_file.name}
+      </p>
+    )}
+
+  </div>
+
+</div>
+
                   <div className="grid grid-cols-2 gap-x-10 gap-y-8">
 
                     <div>
@@ -3200,29 +3324,45 @@ async function generateStaffId() {
 
                     </div>
 
-                    <div>
+<div>
 
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
-                        Department
-                      </label>
+  <label className="block text-sm font-semibold text-slate-700 mb-2">
+    Department
+  </label>
 
-                      <input
-                        type="text"
-                        value={
-                          editingStaff.department ||
-                          ""
-                        }
-                        onChange={(e) =>
-                          setEditingStaff({
-                            ...editingStaff,
-                            department:
-                              e.target.value,
-                          })
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
-                      />
+  <select
+    value={
+      editingStaff.department ||
+      ""
+    }
+    onChange={(e) =>
+      setEditingStaff({
+        ...editingStaff,
+        department:
+          e.target.value,
+      })
+    }
+    className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none bg-white"
+  >
 
-                    </div>
+    <option value="">
+      Select Department
+    </option>
+
+    {DEPARTMENTS.map(
+      (dept) => (
+        <option
+          key={dept}
+          value={dept}
+        >
+          {dept}
+        </option>
+      )
+    )}
+
+  </select>
+
+</div>
 
                     <div>
 
@@ -3271,6 +3411,43 @@ async function generateStaffId() {
                       />
 
                     </div>
+
+                    <div>
+
+  <label className="block text-sm font-semibold text-slate-700 mb-2">
+    Gender
+  </label>
+
+  <select
+    value={
+      editingStaff.gender ||
+      ""
+    }
+    onChange={(e) =>
+      setEditingStaff({
+        ...editingStaff,
+        gender:
+          e.target.value,
+      })
+    }
+    className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none bg-white"
+  >
+
+    <option value="">
+      Select Gender
+    </option>
+
+    <option value="Male">
+      Male
+    </option>
+
+    <option value="Female">
+      Female
+    </option>
+
+  </select>
+
+</div>
 
                     <div>
 

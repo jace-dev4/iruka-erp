@@ -4,10 +4,12 @@ import { useState } from "react";
 
 interface InventoryHistoryProps {
   transactions: any[];
+  onEditReceived: (transaction: any) => void;
 }
 
 export default function InventoryHistory({
   transactions,
+  onEditReceived,
 }: InventoryHistoryProps) {
 
   const [historyLimit, setHistoryLimit] = useState(10);
@@ -86,6 +88,10 @@ export default function InventoryHistory({
                 Date
               </th>
 
+              <th className="p-4 text-center">
+                More
+              </th>
+
             </tr>
 
           </thead>
@@ -97,7 +103,7 @@ export default function InventoryHistory({
               <tr>
 
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="p-12 text-center text-slate-400"
                 >
                   No inventory history found.
@@ -148,13 +154,19 @@ export default function InventoryHistory({
 
                   {/* QUANTITY */}
 
-                  <td className="p-4 text-center text-amber-300 font-black">
+<td className="p-4 text-center text-amber-300 font-black">
 
-                    {Number(
-                      item.quantity_used || 0
-                    ).toLocaleString()}
+  {Number(
+    item.quantity_used || 0
+  ).toLocaleString()}{" "}
 
-                  </td>
+  {item.material_name === "Brown"
+    ? "kg"
+    : item.material_name.includes("Nylon")
+    ? "Pieces"
+    : ""}
+
+</td>
 
                   {/* REFERENCE */}
 
@@ -168,16 +180,42 @@ export default function InventoryHistory({
 
                   <td className="p-4 text-right text-slate-400">
 
-{item.created_at
-  ? new Date(item.created_at).toLocaleString(
-      "en-NG",
-      {
-        timeZone: "Africa/Lagos",
-        dateStyle: "medium",
-        timeStyle: "short",
-      }
-    )
-  : "—"}
+                    {item.created_at
+                      ? new Date(item.created_at).toLocaleString(
+                          "en-NG",
+                          {
+                            timeZone: "Africa/Lagos",
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          }
+                        )
+                      : "—"}
+
+                  </td>
+
+                  {/* ACTION */}
+
+                  <td className="p-4 text-center">
+
+                    {item.transaction_type === "RECEIVED" ? (
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onEditReceived(item)
+                        }
+                        className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-yellow-500 hover:text-black border border-slate-600 hover:border-yellow-400 text-yellow-300 font-bold text-sm transition"
+                      >
+                        Edit
+                      </button>
+
+                    ) : (
+
+                      <span className="text-slate-600 text-sm">
+                        —
+                      </span>
+
+                    )}
 
                   </td>
 

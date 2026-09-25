@@ -59,7 +59,17 @@ const butterUnits = butterKg / 15;
 
   /* =========================
      BROWN
-     0.5 L PER BATCH
+     200 GRAMS PER DOUGH BATCH
+
+     PRODUCTION:
+     Brown is consumed in KG.
+
+     INVENTORY:
+     Brown is stored in BUCKETS.
+
+     1 bucket = 25 KG
+     1 KG = 1,000 GRAMS
+     200 GRAMS = 0.2 KG
 
      ONLY:
      Small Iruka
@@ -69,7 +79,7 @@ const butterUnits = butterKg / 15;
      Jumbo Iruka
   ========================== */
 
-  const brown =
+  const brownGrams =
     [
       "Small Iruka",
       "Big Smart",
@@ -77,9 +87,12 @@ const butterUnits = butterKg / 15;
       "Classic Iruka",
       "Jumbo Iruka",
     ].includes(selectedProduct)
-      ? batches * 0.5
+      ? batches * 200
       : 0;
 
+  const brownKg = brownGrams / 1000;
+
+  const brownBuckets = brownKg / 25;
   /* =========================
      TAPE
      0.8181 PACK PER BATCH
@@ -150,7 +163,16 @@ const butterUnits = butterKg / 15;
 
   /* =========================
      PRODUCT NYLON
-     1 NYLON PER PRODUCED PIECE
+
+     PRODUCTION:
+     Nylon is required per PIECE produced.
+
+     INVENTORY:
+     Nylon is stored in PACKS.
+
+     Therefore:
+     Pieces Produced / Pieces Per Pack
+     = Packs Deducted
   ========================== */
 
   const nylonNameMap: Record<string, string> = {
@@ -166,9 +188,34 @@ const butterUnits = butterKg / 15;
     "Big Brother Family": "Big Brother Family Nylon",
   };
 
-  const nylonName = nylonNameMap[selectedProduct] || "";
+  const nylonPiecesPerPackMap: Record<string, number> = {
+    "Small Iruka": 100,
+    "Small Rosy": 100,
 
-  const nylon = produced;
+    "Medium Iruka": 200,
+    "Medium Rosy": 200,
+
+    "Big Smart": 200,
+
+    "Classic Iruka": 200,
+    "Classic Fruits": 200,
+
+    "Jumbo Iruka": 200,
+    "Jumbo Fruits": 200,
+
+    "Big Brother Family": 100,
+  };
+
+  const nylonName =
+    nylonNameMap[selectedProduct] || "";
+
+  const nylonPiecesPerPack =
+    nylonPiecesPerPackMap[selectedProduct] || 1;
+
+  const nylonPieces = produced;
+
+  const nylonPacks =
+    nylonPieces / nylonPiecesPerPack;
 
   /* =========================
      NO PRODUCT SELECTED
@@ -305,7 +352,7 @@ const butterUnits = butterKg / 15;
         {nylonName && (
           <RecipeRow
             title={nylonName}
-            value={`${nylon.toLocaleString()} Pieces`}
+            value={`${nylonPacks.toFixed(2)} Packs (${nylonPieces.toLocaleString()} Pieces)`}
           />
         )}
 
@@ -313,12 +360,12 @@ const butterUnits = butterKg / 15;
             BROWN
         ========================== */}
 
-        {brown > 0 && (
-          <RecipeRow
-            title="Brown"
-            value={`${brown.toFixed(2)} L`}
-          />
-        )}
+{brownKg > 0 && (
+  <RecipeRow
+    title="Brown"
+    value={`${brownBuckets.toFixed(3)} Buckets (${brownKg.toFixed(2)} kg)`}
+  />
+)}
 
         {/* =========================
             TAPE

@@ -1,7 +1,11 @@
-
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { supabase } from "@/lib/supabase";
 import PremiumButton from "@/components/ui/PremiumButton";
@@ -11,6 +15,7 @@ const DEPARTMENTS = [
   "Production",
   "Sales",
   "Inventory",
+  "Packaging",
   "Administration",
   "Dispatch",
   "Security",
@@ -20,6 +25,16 @@ const DEPARTMENTS = [
 const STAFF_PAGE_SIZE = 10;
 
 export default function StaffPage() {
+  /* =====================================================
+     FILE INPUT REFS
+  ====================================================== */
+
+  const photoInputRef =
+    useRef<HTMLInputElement>(null);
+
+  const cvInputRef =
+    useRef<HTMLInputElement>(null);
+
   /* =====================================================
      STATES
   ====================================================== */
@@ -121,6 +136,13 @@ export default function StaffPage() {
     useState(false);
 
   /* =====================================================
+     STAFF ACTION MENU
+  ====================================================== */
+
+  const [openActionMenu, setOpenActionMenu] =
+    useState<string | null>(null);
+
+  /* =====================================================
      LOAD DATA + SUPABASE REALTIME
   ====================================================== */
 
@@ -165,15 +187,38 @@ export default function StaffPage() {
   }, []);
 
   /* =====================================================
-     GENERATE STAFF ID
+     GENERATE UNIQUE STAFF ID
   ====================================================== */
 
-  function generateStaffId() {
-    const random =
-      Math.floor(1000 + Math.random() * 9000);
+async function generateStaffId() {
+  let newStaffId = "";
+  let isUnique = false;
 
-    setStaffId(`IRK-${random}`);
+  while (!isUnique) {
+    const randomNumber = Math.floor(
+      100000 + Math.random() * 900000
+    );
+
+    newStaffId = `IRK-${randomNumber}`;
+
+    const { data, error } = await supabase
+      .from("staff")
+      .select("id")
+      .eq("staff_id", newStaffId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Failed to check Staff ID:", error);
+      return;
+    }
+
+    if (!data) {
+      isUnique = true;
+    }
   }
+
+  setStaffId(newStaffId);
+}
 
   /* =====================================================
      FETCH DATA
@@ -264,8 +309,24 @@ export default function StaffPage() {
     setSavingStaff(true);
 
     try {
+      /* =================================================
+         MAKE SURE STAFF ID EXISTS
+      ================================================== */
+
+      if (!staffId) {
+        await generateStaffId();
+      }
+
+      let currentStaffId = staffId;
+
+      if (!currentStaffId) {
+        throw new Error(
+          "Unable to generate Staff ID."
+        );
+      }
+
       /* ==========================
-         Upload CV
+         UPLOAD CV
       ========================== */
 
       let cvUrl: string | null = null;
@@ -293,7 +354,7 @@ export default function StaffPage() {
       }
 
       /* ==========================
-         Upload Passport Photo
+         UPLOAD PASSPORT PHOTO
       ========================== */
 
       let photoUrl: string | null = null;
@@ -325,11 +386,15 @@ export default function StaffPage() {
         photoUrl = data.publicUrl;
       }
 
-      const { error } = await supabase
+      /* ==========================
+         INSERT STAFF
+      ========================== */
+
+      let { error } = await supabase
         .from("staff")
         .insert([
           {
-            staff_id: staffId,
+            staff_id: currentStaffId,
             full_name: fullName,
             phone_number: phoneNumber,
             department,
@@ -354,6 +419,70 @@ export default function StaffPage() {
           },
         ]);
 
+      /* =================================================
+         IF STAFF ID COLLISION OCCURS
+         GENERATE ANOTHER ID AND RETRY ONCE
+      ================================================== */
+
+      if (
+        error &&
+        (
+          error.code === "23505" ||
+          error.message
+            ?.toLowerCase()
+            .includes("staff_staff_id_unique")
+        )
+      ) {
+        await generateStaffId();
+
+        const { data: existingStaff } =
+          await supabase
+            .from("staff")
+            .select("id")
+            .eq("staff_id", staffId)
+            .maybeSingle();
+
+        if (existingStaff) {
+          throw new Error(
+            "Unable to generate a unique Staff ID. Please try again."
+          );
+        }
+
+        currentStaffId = staffId;
+
+        const retryResult =
+          await supabase
+            .from("staff")
+            .insert([
+              {
+                staff_id: currentStaffId,
+                full_name: fullName,
+                phone_number: phoneNumber,
+                department,
+                position,
+                gender,
+                address,
+                emergency_contact:
+                  emergencyContact,
+                date_joined: dateJoined,
+                date_of_birth:
+                  dateOfBirth || null,
+                salary: Number(salary),
+                bank_name: bankName,
+                account_name:
+                  accountName,
+                account_number:
+                  accountNumber,
+                employment_status:
+                  employmentStatus,
+                photo_url: photoUrl,
+                cv_url: cvUrl,
+              },
+            ]);
+
+        error = retryResult.error;
+      }
+
       if (error) {
         toast.error(error.message);
         return;
@@ -362,6 +491,10 @@ export default function StaffPage() {
       toast.success(
         "Staff registered successfully."
       );
+
+      /* =================================================
+         RESET ALL REGISTRATION FIELDS
+      ================================================== */
 
       setFullName("");
       setPhoneNumber("");
@@ -377,10 +510,31 @@ export default function StaffPage() {
       setEmergencyContact("");
       setDateJoined("");
       setDateOfBirth("");
+
+      /* =================================================
+         RESET UPLOADED FILE STATE
+      ================================================== */
+
       setPhoto(null);
       setCv(null);
 
-      generateStaffId();
+      /* =================================================
+         COMPLETELY CLEAR FILE INPUT ELEMENTS
+      ================================================== */
+
+      if (photoInputRef.current) {
+        photoInputRef.current.value = "";
+      }
+
+      if (cvInputRef.current) {
+        cvInputRef.current.value = "";
+      }
+
+      /* =================================================
+         GENERATE FRESH STAFF ID
+      ================================================== */
+
+      await generateStaffId();
 
       await fetchData();
     } catch (error: any) {
@@ -608,7 +762,7 @@ export default function StaffPage() {
     setShowRemoveErpModal(true);
   }
 
-   /* =====================================================
+  /* =====================================================
      REMOVE ERP ACCESS
   ====================================================== */
 
@@ -623,7 +777,8 @@ export default function StaffPage() {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
           body: JSON.stringify({
             staffId: selectedMember.staff_id,
@@ -646,28 +801,15 @@ export default function StaffPage() {
         `${selectedMember.full_name} has been removed from ERP access.`
       );
 
-      /* ==========================================
-         CLOSE ALL ERP MODALS
-      ========================================== */
-
       setShowRemoveErpModal(false);
       setShowErpModal(false);
       setSelectedMember(null);
-
-      /* ==========================================
-         RESET ERP FORM
-      ========================================== */
 
       setErpEmail("");
       setErpRole("management");
       setTemporaryPassword("");
 
-      /* ==========================================
-         REFRESH STAFF DIRECTORY
-      ========================================== */
-
       await fetchData();
-
     } catch (error: any) {
       console.error(
         "Remove ERP access error:",
@@ -678,11 +820,11 @@ export default function StaffPage() {
         error?.message ||
           "Something went wrong while removing ERP access."
       );
-
     } finally {
       setRemovingErpAccess(false);
     }
   }
+
   /* =====================================================
      OPEN DELETE CONFIRMATION
   ====================================================== */
@@ -702,13 +844,6 @@ export default function StaffPage() {
     setDeletingStaff(true);
 
     try {
-      /*
-       * If the staff member still has ERP access,
-       * remove the ERP account first.
-       *
-       * This prevents an employee from remaining
-       * as an active ERP login after deletion.
-       */
       if (
         staffToDelete.erp_user &&
         staffToDelete.erp_email
@@ -743,9 +878,6 @@ export default function StaffPage() {
         }
       }
 
-      /*
-       * Remove staff debt records.
-       */
       const { error: debtDeleteError } =
         await supabase
           .from("staff_debts")
@@ -769,9 +901,6 @@ export default function StaffPage() {
         return;
       }
 
-      /*
-       * Delete staff record.
-       */
       const { error: staffDeleteError } =
         await supabase
           .from("staff")
@@ -1106,7 +1235,7 @@ export default function StaffPage() {
   ====================================================== */
 
   return (
-<ProtectedRoute allowedRoles={["admin", "management"]}>
+    <ProtectedRoute allowedRoles={["admin", "management"]}>
       <div className="min-h-screen bg-gradient-to-br from-[#081028] via-[#0B1739] to-[#142850] p-10">
 
         {/* =====================================================
@@ -1436,6 +1565,7 @@ export default function StaffPage() {
               </label>
 
               <input
+                ref={photoInputRef}
                 type="file"
                 accept="image/*"
                 onChange={(e) =>
@@ -1454,6 +1584,7 @@ export default function StaffPage() {
               </label>
 
               <input
+                ref={cvInputRef}
                 type="file"
                 accept=".pdf"
                 onChange={(e) =>
@@ -1552,383 +1683,470 @@ export default function StaffPage() {
           </div>
         </div>
 
-{/* =====================================================
-    STAFF DIRECTORY
-====================================================== */}
+        {/* =====================================================
+            STAFF DIRECTORY
+        ====================================================== */}
 
-<div className="rounded-3xl bg-[#111C44] border border-slate-700 shadow-2xl p-8">
+        <div className="rounded-3xl bg-[#111C44] border border-slate-700 shadow-2xl p-8">
 
-  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
 
-    <div>
+            <div>
 
-      <h2 className="text-3xl font-black text-white">
-        Staff Directory
-      </h2>
+              <h2 className="text-3xl font-black text-white">
+                Staff Directory
+              </h2>
 
-      <p className="text-slate-400 mt-1">
-        Showing{" "}
-        {displayedStaff.length}{" "}
-        of{" "}
-        {filteredStaff.length}{" "}
-        staff records.
-      </p>
+              <p className="text-slate-400 mt-1">
+                Showing{" "}
+                {displayedStaff.length}{" "}
+                of{" "}
+                {filteredStaff.length}{" "}
+                staff records.
+              </p>
 
-    </div>
+            </div>
 
-    <input
-      type="text"
-      placeholder="Search staff..."
-      value={searchStaff}
-      onChange={(e) => {
-        setSearchStaff(e.target.value);
+            <input
+              type="text"
+              placeholder="Search staff..."
+              value={searchStaff}
+              onChange={(e) => {
+                setSearchStaff(e.target.value);
 
-        setVisibleStaffCount(
-          STAFF_PAGE_SIZE
-        );
-      }}
-      className="mt-5 md:mt-0 w-full md:w-72 rounded-2xl border border-slate-600 bg-[#0B1739] text-white placeholder:text-slate-400 p-4 outline-none focus:border-blue-500"
-    />
-
-  </div>
-
-  <div className="overflow-x-auto rounded-2xl">
-
-    <table className="w-full min-w-[1200px]">
-
-      <thead>
-
-        <tr className="bg-gradient-to-r from-blue-950 via-slate-900 to-blue-900 text-white">
-
-          <th className="p-5 text-left">
-            Photo
-          </th>
-
-          <th className="p-5 text-left">
-            Full Name
-          </th>
-
-          <th className="p-5 text-left">
-            Phone
-          </th>
-
-          <th className="p-5 text-left">
-            Department
-          </th>
-
-          <th className="p-5 text-left">
-            ERP Access
-          </th>
-
-          <th className="p-5 text-left">
-            Salary
-          </th>
-
-          <th className="p-5 text-left">
-            Debt
-          </th>
-
-          <th className="p-5 text-left">
-            Balance
-          </th>
-
-          <th className="p-5 text-left">
-            Status
-          </th>
-
-          <th className="p-5 text-center">
-            Action
-          </th>
-
-        </tr>
-
-      </thead>
-
-      <tbody>
-
-        {displayedStaff.length === 0 ? (
-          <tr>
-
-            <td
-              colSpan={10}
-              className="p-12 text-center text-slate-400"
-            >
-              No staff records found.
-            </td>
-
-          </tr>
-        ) : (
-          displayedStaff.map(
-            (member) => {
-
-              const debt =
-                getTotalDebt(
-                  member.full_name
+                setVisibleStaffCount(
+                  STAFF_PAGE_SIZE
                 );
+              }}
+              className="mt-5 md:mt-0 w-full md:w-72 rounded-2xl border border-slate-600 bg-[#0B1739] text-white placeholder:text-slate-400 p-4 outline-none focus:border-blue-500"
+            />
 
-              const balance =
-                Number(
-                  member.salary
-                ) - debt;
+          </div>
 
-              return (
-                <tr
-                  key={member.id}
-                  className="border-b border-slate-700 hover:bg-slate-800 transition"
-                >
+          <div className="overflow-x-auto rounded-2xl">
 
-                  {/* PHOTO */}
+            <table className="w-full min-w-[1200px]">
 
-                  <td className="p-5">
+              <thead>
 
-                    <div className="h-12 w-12 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center">
+                <tr className="bg-gradient-to-r from-blue-950 via-slate-900 to-blue-900 text-white">
 
-                      {member.photo_url ? (
-                        <img
-                          src={
-                            member.photo_url
-                          }
-                          alt={
-                            member.full_name
-                          }
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-xl">
-                          👤
-                        </span>
-                      )}
+                  <th className="p-5 text-left">
+                    Photo
+                  </th>
 
-                    </div>
+                  <th className="p-5 text-left">
+                    Full Name
+                  </th>
 
-                  </td>
+                  <th className="p-5 text-left">
+                    Phone
+                  </th>
 
-                  {/* FULL NAME */}
+                  <th className="p-5 text-left">
+                    Department
+                  </th>
 
-                  <td className="p-5 font-semibold text-white whitespace-nowrap">
-                    {member.full_name}
-                  </td>
+                  <th className="p-5 text-left">
+                    Position
+                  </th>
 
-                  {/* PHONE */}
+                  <th className="p-5 text-left">
+                    Salary
+                  </th>
 
-                  <td className="p-5 text-slate-200 whitespace-nowrap">
-                    {member.phone_number}
-                  </td>
+                  <th className="p-5 text-left">
+                    Debt
+                  </th>
 
-                  {/* DEPARTMENT */}
+                  <th className="p-5 text-left">
+                    Balance
+                  </th>
 
-                  <td className="p-5 text-slate-200">
+                  <th className="p-5 text-left">
+                    Status
+                  </th>
 
-                    <span className="rounded-full bg-blue-100 text-blue-900 px-4 py-2 text-sm font-semibold whitespace-nowrap">
-                      {member.department}
-                    </span>
-
-                  </td>
-
-                  {/* ERP ACCESS */}
-
-                  <td className="p-5">
-
-                    {member.erp_user ? (
-                      <span className="rounded-full bg-green-100 text-green-700 px-3 py-1 text-sm font-semibold whitespace-nowrap">
-                        ✅{" "}
-                        {
-                          member.erp_role
-                        }
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-gray-100 text-gray-600 px-3 py-1 text-sm font-semibold whitespace-nowrap">
-                        ❌ No ERP
-                      </span>
-                    )}
-
-                  </td>
-
-                  {/* SALARY */}
-
-                  <td className="p-5 font-bold text-green-700 whitespace-nowrap">
-                    ₦
-                    {Number(
-                      member.salary
-                    ).toLocaleString()}
-                  </td>
-
-                  {/* DEBT */}
-
-                  <td className="p-5 font-bold text-red-600 whitespace-nowrap">
-                    ₦
-                    {debt.toLocaleString()}
-                  </td>
-
-                  {/* BALANCE */}
-
-                  <td className="p-5 font-black text-blue-300 whitespace-nowrap">
-                    ₦
-                    {balance.toLocaleString()}
-                  </td>
-
-                  {/* STATUS */}
-
-                  <td className="p-5">
-
-                    <span
-                      className={`rounded-full px-4 py-2 text-xs font-bold whitespace-nowrap ${
-                        member.employment_status ===
-                        "Active"
-                          ? "bg-green-100 text-green-700"
-                          : member.employment_status ===
-                            "On Leave"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : member.employment_status ===
-                            "Suspended"
-                          ? "bg-orange-100 text-orange-700"
-                          : member.employment_status ===
-                            "Terminated"
-                          ? "bg-red-100 text-red-700"
-                          : member.employment_status ===
-                            "Resigned"
-                          ? "bg-gray-100 text-gray-700"
-                          : member.employment_status ===
-                            "Retired"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {member.employment_status ||
-                        "Unknown"}
-                    </span>
-
-                  </td>
-
-                  {/* ACTIONS */}
-
-                  <td className="p-5">
-
-                    <div className="flex flex-wrap gap-2 justify-center">
-
-                      {/* VIEW */}
-
-                      <button
-                        onClick={() => {
-                          setProfileStaff(
-                            member
-                          );
-
-                          setShowProfileModal(
-                            true
-                          );
-                        }}
-                        className="rounded-xl bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 font-semibold shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-blue-500/20 active:scale-95"
-                      >
-                        View
-                      </button>
-
-                      {/* EDIT */}
-
-                      <button
-                        onClick={() => {
-                          setEditingStaff({
-                            ...member,
-                          });
-
-                          setShowEditModal(
-                            true
-                          );
-                        }}
-                        className="rounded-xl bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 font-semibold shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-amber-500/20 active:scale-95"
-                      >
-                        Edit
-                      </button>
-
-                      {/* ERP ACCESS */}
-
-                      <button
-                        onClick={() =>
-                          openErpAccess(
-                            member
-                          )
-                        }
-                        className={`rounded-xl ${
-                          member.erp_user
-                            ? "bg-emerald-700 hover:bg-emerald-800"
-                            : "bg-indigo-700 hover:bg-indigo-800"
-                        } text-white px-4 py-2 font-semibold shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-95`}
-                      >
-                        {member.erp_user
-                          ? "ERP Manage"
-                          : "ERP Access"}
-                      </button>
-
-                      {/* DELETE */}
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openDeleteModal(
-                            member
-                          )
-                        }
-                        className="rounded-xl bg-red-600 hover:bg-red-700 text-white px-4 py-2 font-semibold shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-red-500/30 active:scale-95"
-                      >
-                        🗑 Delete
-                      </button>
-
-                    </div>
-
-                  </td>
+                  <th className="p-5 text-center">
+                    More
+                  </th>
 
                 </tr>
-              );
-            }
-          )
-        )}
 
-      </tbody>
+              </thead>
 
-    </table>
+              <tbody>
 
-  </div>
+                {displayedStaff.length === 0 ? (
+                  <tr>
 
-  {/* =====================================================
-      LOAD MORE
-  ====================================================== */}
+                    <td
+                      colSpan={10}
+                      className="p-12 text-center text-slate-400"
+                    >
+                      No staff records found.
+                    </td>
 
-  {hasMoreStaff && (
-    <div className="flex justify-center mt-8">
+                  </tr>
+                ) : (
+                  displayedStaff.map(
+                    (member) => {
 
-      <button
-        type="button"
-        onClick={
-          loadMoreStaff
-        }
-        className="rounded-2xl border border-blue-400/30 bg-blue-700 px-8 py-4 font-bold text-white shadow-xl transition-all duration-300 hover:-translate-y-0.5 hover:bg-blue-600 hover:shadow-blue-500/30 active:scale-95"
-      >
-        Load More Staff
+                      const debt =
+                        getTotalDebt(
+                          member.full_name
+                        );
 
-        <span className="ml-2 text-blue-200">
-          +
-          {Math.min(
-            STAFF_PAGE_SIZE,
-            filteredStaff.length -
-              visibleStaffCount
+                      const balance =
+                        Number(
+                          member.salary
+                        ) - debt;
+
+                      return (
+                        <tr
+                          key={member.id}
+                          onClick={() => {
+                            setProfileStaff(member);
+                            setShowProfileModal(true);
+                          }}
+                          className="cursor-pointer border-b border-slate-700 hover:bg-slate-800 transition"
+                        >
+
+                          {/* PHOTO */}
+
+                          <td className="p-5">
+
+                            <div className="h-12 w-12 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center">
+
+                              {member.photo_url ? (
+                                <img
+                                  src={
+                                    member.photo_url
+                                  }
+                                  alt={
+                                    member.full_name
+                                  }
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-xl">
+                                  👤
+                                </span>
+                              )}
+
+                            </div>
+
+                          </td>
+
+                          {/* FULL NAME */}
+
+                          <td className="p-5 font-semibold text-white whitespace-nowrap">
+                            {member.full_name}
+                          </td>
+
+                          {/* PHONE */}
+
+                          <td className="p-5 text-slate-200 whitespace-nowrap">
+                            {member.phone_number}
+                          </td>
+
+                          {/* DEPARTMENT */}
+
+                          <td className="p-5 text-slate-200">
+
+                            <span className="rounded-full bg-blue-100 text-blue-900 px-4 py-2 text-sm font-semibold whitespace-nowrap">
+                              {member.department}
+                            </span>
+
+                          </td>
+
+                          {/* POSITION */}
+
+                          <td className="p-5">
+
+                            <span className="inline-flex rounded-full bg-blue-100 text-blue-900 px-4 py-2 text-sm font-semibold whitespace-nowrap">
+                              {member.position ||
+                                "No Position Assigned"}
+                            </span>
+
+                          </td>
+
+                          {/* SALARY */}
+
+                          <td className="p-5 font-bold text-green-700 whitespace-nowrap">
+                            ₦
+                            {Number(
+                              member.salary
+                            ).toLocaleString()}
+                          </td>
+
+                          {/* DEBT */}
+
+                          <td className="p-5 font-bold text-red-600 whitespace-nowrap">
+                            ₦
+                            {debt.toLocaleString()}
+                          </td>
+
+                          {/* BALANCE */}
+
+                          <td className="p-5 font-black text-blue-300 whitespace-nowrap">
+                            ₦
+                            {balance.toLocaleString()}
+                          </td>
+
+                          {/* STATUS */}
+
+                          <td className="p-5">
+
+                            <span
+                              className={`rounded-full px-4 py-2 text-xs font-bold whitespace-nowrap ${
+                                member.employment_status ===
+                                "Active"
+                                  ? "bg-green-100 text-green-700"
+                                  : member.employment_status ===
+                                    "On Leave"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : member.employment_status ===
+                                    "Suspended"
+                                  ? "bg-orange-100 text-orange-700"
+                                  : member.employment_status ===
+                                    "Terminated"
+                                  ? "bg-red-100 text-red-700"
+                                  : member.employment_status ===
+                                    "Resigned"
+                                  ? "bg-gray-100 text-gray-700"
+                                  : member.employment_status ===
+                                    "Retired"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {member.employment_status ||
+                                "Unknown"}
+                            </span>
+
+                          </td>
+
+                          {/* PREMIUM ACTION MENU */}
+
+                          <td
+                            className="p-5"
+                            onClick={(e) =>
+                              e.stopPropagation()
+                            }
+                          >
+
+                            <div className="relative flex justify-center">
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenActionMenu(
+                                    openActionMenu ===
+                                      member.id
+                                      ? null
+                                      : member.id
+                                  )
+                                }
+                                className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-all duration-200 ${
+                                  openActionMenu ===
+                                  member.id
+                                    ? "border-blue-400 bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                                    : "border-slate-600 bg-[#0B1739] text-slate-300 hover:border-blue-400 hover:bg-blue-900/70 hover:text-white"
+                                }`}
+                                aria-label="Staff actions"
+                              >
+                                <span className="text-xl leading-none">
+                                  ⋯
+                                </span>
+                              </button>
+
+                              {openActionMenu ===
+                                member.id && (
+                                <>
+
+                                  <button
+                                    type="button"
+                                    aria-label="Close action menu"
+                                    onClick={() =>
+                                      setOpenActionMenu(
+                                        null
+                                      )
+                                    }
+                                    className="fixed inset-0 z-[40] cursor-default"
+                                  />
+
+                                  <div className="absolute right-0 top-14 z-[50] w-56 overflow-hidden rounded-2xl border border-slate-700 bg-[#0B1739] p-2 shadow-2xl shadow-black/40">
+
+                                    {/* VIEW PROFILE */}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenActionMenu(
+                                          null
+                                        );
+
+                                        setProfileStaff(
+                                          member
+                                        );
+
+                                        setShowProfileModal(
+                                          true
+                                        );
+                                      }}
+                                      className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-slate-200 transition-all hover:bg-blue-600/20 hover:text-white"
+                                    >
+                                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-300">
+                                        👤
+                                      </span>
+
+                                      <span>
+                                        View Profile
+                                      </span>
+                                    </button>
+
+                                    {/* EDIT STAFF */}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenActionMenu(
+                                          null
+                                        );
+
+                                        setEditingStaff({
+                                          ...member,
+                                        });
+
+                                        setShowEditModal(
+                                          true
+                                        );
+                                      }}
+                                      className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-slate-200 transition-all hover:bg-amber-500/10 hover:text-white"
+                                    >
+                                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-300">
+                                        ✎
+                                      </span>
+
+                                      <span>
+                                        Edit Staff
+                                      </span>
+                                    </button>
+
+                                    {/* ERP ACCESS */}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenActionMenu(
+                                          null
+                                        );
+
+                                        openErpAccess(
+                                          member
+                                        );
+                                      }}
+                                      className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-slate-200 transition-all hover:bg-emerald-500/10 hover:text-white"
+                                    >
+                                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-300">
+                                        🔐
+                                      </span>
+
+                                      <span>
+                                        {member.erp_user
+                                          ? "Manage ERP Access"
+                                          : "Grant ERP Access"}
+                                      </span>
+                                    </button>
+
+                                    <div className="my-2 border-t border-slate-700" />
+
+                                    {/* DELETE */}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenActionMenu(
+                                          null
+                                        );
+
+                                        openDeleteModal(
+                                          member
+                                        );
+                                      }}
+                                      className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-red-400 transition-all hover:bg-red-500/10 hover:text-red-300"
+                                    >
+                                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10">
+                                        🗑
+                                      </span>
+
+                                      <span>
+                                        Delete Staff
+                                      </span>
+                                    </button>
+
+                                  </div>
+
+                                </>
+                              )}
+
+                            </div>
+
+                          </td>
+
+                        </tr>
+                      );
+                    }
+                  )
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+          {/* =====================================================
+              LOAD MORE
+          ====================================================== */}
+
+          {hasMoreStaff && (
+            <div className="flex justify-center mt-8">
+
+              <button
+                type="button"
+                onClick={
+                  loadMoreStaff
+                }
+                className="rounded-2xl border border-blue-400/30 bg-blue-700 px-8 py-4 font-bold text-white shadow-xl transition-all duration-300 hover:-translate-y-0.5 hover:bg-blue-600 hover:shadow-blue-500/30 active:scale-95"
+              >
+                Load More Staff
+
+                <span className="ml-2 text-blue-200">
+                  +
+                  {Math.min(
+                    STAFF_PAGE_SIZE,
+                    filteredStaff.length -
+                      visibleStaffCount
+                  )}
+                </span>
+
+              </button>
+
+            </div>
           )}
-        </span>
 
-      </button>
+          {!hasMoreStaff &&
+            filteredStaff.length >
+              STAFF_PAGE_SIZE &&
+            !searchStaff.trim() && (
+              <div className="mt-8 text-center text-sm text-slate-500">
+                All staff records loaded.
+              </div>
+            )}
 
-    </div>
-  )}
-
-  {!hasMoreStaff &&
-    filteredStaff.length >
-      STAFF_PAGE_SIZE &&
-    !searchStaff.trim() && (
-      <div className="mt-8 text-center text-sm text-slate-500">
-        All staff records loaded.
-      </div>
-    )}
-
-</div>
+        </div>
 
         {/* =====================================================
             DELETE STAFF MODAL
@@ -2069,8 +2287,6 @@ export default function StaffPage() {
 
               <div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl overflow-hidden">
 
-                {/* HEADER */}
-
                 <div
                   className={`p-7 ${
                     selectedMember.erp_user
@@ -2105,8 +2321,6 @@ export default function StaffPage() {
 
                 </div>
 
-                {/* BODY */}
-
                 <div className="p-8 space-y-6">
 
                   <div>
@@ -2126,11 +2340,10 @@ export default function StaffPage() {
 
                   </div>
 
-                  {/* EXISTING ERP ACCOUNT */}
-
                   {selectedMember.erp_user ? (
 
                     <>
+
                       <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6">
 
                         <div className="flex items-center gap-4">
@@ -2217,11 +2430,13 @@ export default function StaffPage() {
                         </button>
 
                       </div>
+
                     </>
 
                   ) : (
 
                     <>
+
                       <div>
 
                         <label className="block text-sm font-bold text-slate-700 mb-2">
@@ -2274,6 +2489,10 @@ export default function StaffPage() {
                             Accountant
                           </option>
 
+                          <option value="production">
+                            Production
+                          </option>
+
                           <option value="admin">
                             Admin
                           </option>
@@ -2305,11 +2524,10 @@ export default function StaffPage() {
                       </div>
 
                     </>
+
                   )}
 
                 </div>
-
-                {/* FOOTER */}
 
                 <div className="flex justify-end gap-4 bg-slate-50 px-8 py-6">
 
@@ -2484,21 +2702,21 @@ export default function StaffPage() {
 
                   <div className="flex items-center gap-6">
 
-<div className="h-44 w-44 md:h-52 md:w-52 rounded-3xl bg-white/20 flex items-center justify-center overflow-hidden border-4 border-white/20 shadow-2xl flex-shrink-0">
+                    <div className="h-44 w-44 md:h-52 md:w-52 rounded-3xl bg-white/20 flex items-center justify-center overflow-hidden border-4 border-white/20 shadow-2xl flex-shrink-0">
 
-  {profileStaff.photo_url ? (
-    <img
-      src={profileStaff.photo_url}
-      alt={profileStaff.full_name}
-      className="h-full w-full object-cover"
-    />
-  ) : (
-    <span className="text-7xl">
-      👤
-    </span>
-  )}
+                      {profileStaff.photo_url ? (
+                        <img
+                          src={profileStaff.photo_url}
+                          alt={profileStaff.full_name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-7xl">
+                          👤
+                        </span>
+                      )}
 
-</div>
+                    </div>
 
                     <div>
 

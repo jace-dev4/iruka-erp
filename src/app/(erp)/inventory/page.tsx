@@ -22,9 +22,16 @@ export default function InventoryPage() {
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
+  
 
   const [refreshing, setRefreshing] = useState(false);
   const [addingInventory, setAddingInventory] = useState(false);
+
+  const [editingTransaction, setEditingTransaction] =
+  useState<any | null>(null);
+
+const [editQuantity, setEditQuantity] =
+  useState("");
 
   const [notification, setNotification] = useState<{
     type: "success" | "error" | "info";
@@ -254,6 +261,138 @@ export default function InventoryPage() {
     }
   }
 
+  /* =========================
+   EDIT RECEIVED INVENTORY
+========================== */
+
+async function editReceivedInventory() {
+
+  if (!editingTransaction) {
+    return;
+  }
+
+  const newQuantity = Number(editQuantity);
+
+  if (!Number.isFinite(newQuantity) || newQuantity < 0) {
+    showNotification(
+      "error",
+      "Please enter a valid quantity."
+    );
+    return;
+  }
+
+  const oldQuantity =
+    Number(editingTransaction.quantity_used || 0);
+
+  const difference =
+    newQuantity - oldQuantity;
+
+  try {
+
+    /* =========================
+       FIND INVENTORY ITEM
+    ========================== */
+
+    const { data: inventoryItem, error: inventoryError } =
+      await supabase
+        .from("inventory")
+        .select("*")
+        .eq(
+          "name",
+          editingTransaction.material_name
+        )
+        .single();
+
+    if (inventoryError) {
+      throw inventoryError;
+    }
+
+    if (!inventoryItem) {
+      throw new Error(
+        "Inventory item not found."
+      );
+    }
+
+    /* =========================
+       CALCULATE CORRECT STOCK
+    ========================== */
+
+    const currentQuantity =
+      Number(inventoryItem.quantity || 0);
+
+    const correctedQuantity =
+      currentQuantity + difference;
+
+    if (correctedQuantity < 0) {
+      throw new Error(
+        "This correction would make inventory quantity negative."
+      );
+    }
+
+    /* =========================
+       UPDATE INVENTORY
+    ========================== */
+
+    const { error: inventoryUpdateError } =
+      await supabase
+        .from("inventory")
+        .update({
+          quantity: correctedQuantity,
+        })
+        .eq("id", inventoryItem.id);
+
+    if (inventoryUpdateError) {
+      throw inventoryUpdateError;
+    }
+
+    /* =========================
+       UPDATE HISTORY ENTRY
+    ========================== */
+
+    const { error: transactionUpdateError } =
+      await supabase
+        .from("inventory_transactions")
+        .update({
+          quantity_used: newQuantity,
+        })
+        .eq(
+          "id",
+          editingTransaction.id
+        );
+
+    if (transactionUpdateError) {
+      throw transactionUpdateError;
+    }
+
+    /* =========================
+       CLOSE EDIT
+    ========================== */
+
+    setEditingTransaction(null);
+    setEditQuantity("");
+
+    await fetchInventory();
+
+    showNotification(
+      "success",
+      `${editingTransaction.material_name} inventory entry corrected successfully.`
+    );
+
+  } catch (error: any) {
+
+    console.error(
+      "Edit inventory error:",
+      error
+    );
+
+    showNotification(
+      "error",
+      error?.message ||
+      "Unable to correct inventory entry."
+    );
+  }
+}
+
 /* =========================
    LOW STOCK CHECKER
 ========================== */
@@ -265,7 +404,7 @@ function isLowStock(item: any) {
     /* Production Ingredients */
     Flour: 400,
     Sugar: 50,
-    Yeast: 10,
+    Yeast: 0.5,
     Butter: 10,
     "Groundnut Oil": 5,
 
@@ -855,13 +994,118 @@ function isLowStock(item: any) {
 
         <div className="mt-10">
 
-          <InventoryHistory
-            transactions={transactions}
-          />
+<InventoryHistory
+  transactions={transactions}
+  onEditReceived={(transaction) => {
+    setEditingTransaction(transaction);
+    setEditQuantity(
+      String(transaction.quantity_used || "")
+    );
+  }}
+/>
 
         </div>
 
       </div>
+
+      {/* =========================
+          EDIT INVENTORY MODAL
+      ========================== */}
+
+      {editingTransaction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+
+          <div className="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-8 shadow-2xl">
+
+            <h2 className="text-2xl font-black text-white">
+              Edit Inventory Entry
+            </h2>
+
+            <p className="mt-2 text-sm text-slate-400">
+              Correct the quantity originally received.
+            </p>
+
+            {/* MATERIAL */}
+
+            <div className="mt-6 rounded-2xl border border-slate-700 bg-slate-800 p-4">
+
+              <p className="text-xs uppercase tracking-wider text-slate-500">
+                Material
+              </p>
+
+              <p className="mt-1 text-lg font-black text-white">
+                {editingTransaction.material_name}
+              </p>
+
+            </div>
+
+            {/* OLD QUANTITY */}
+
+            <div className="mt-5">
+
+              <label className="mb-2 block text-sm font-bold text-slate-400">
+                Original Quantity
+              </label>
+
+              <div className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-slate-400">
+                {Number(
+                  editingTransaction.quantity_used || 0
+                ).toLocaleString()}
+              </div>
+
+            </div>
+
+            {/* NEW QUANTITY */}
+
+            <div className="mt-5">
+
+              <label className="mb-2 block text-sm font-bold text-slate-300">
+                Correct Quantity
+              </label>
+
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={editQuantity}
+                onChange={(e) =>
+                  setEditQuantity(e.target.value)
+                }
+                className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10"
+              />
+
+            </div>
+
+            {/* BUTTONS */}
+
+            <div className="mt-7 flex gap-3">
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingTransaction(null);
+                  setEditQuantity("");
+                }}
+                className="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-5 py-3 font-bold text-white transition hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={editReceivedInventory}
+                className="flex-1 rounded-xl bg-amber-500 px-5 py-3 font-black text-slate-950 transition hover:bg-amber-400"
+              >
+                Save Correction
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
     </ProtectedRoute>
   );
 }

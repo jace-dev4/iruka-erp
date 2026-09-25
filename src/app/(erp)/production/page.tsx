@@ -495,8 +495,16 @@ export default function ProductionPage() {
       const butterNeeded =
         (batches * 1.6) / 15;
 
-      const yeastNeeded =
-        batches;
+// Yeast
+// Production consumes 1 pack per dough batch.
+// Inventory is stored in cartons.
+// 1 carton = 20 packs.
+
+const yeastNeededPacks =
+  batches;
+
+const yeastNeededCartons =
+  yeastNeededPacks / 20;
 
       const groundnutOilNeeded =
         (batches * 0.23) / 23;
@@ -512,16 +520,19 @@ export default function ProductionPage() {
          BROWN
       ========================== */
 
-      const brownNeeded =
-        [
-          "Small Iruka",
-          "Big Smart",
-          "Medium Iruka",
-          "Classic Iruka",
-          "Jumbo Iruka",
-        ].includes(selectedProduct)
-          ? batches * 0.5
-          : 0;
+const brownNeededKg =
+  [
+    "Small Iruka",
+    "Big Smart",
+    "Medium Iruka",
+    "Classic Iruka",
+    "Jumbo Iruka",
+  ].includes(selectedProduct)
+    ? batches * 0.2
+    : 0;
+
+const brownNeededBuckets =
+  brownNeededKg / 25;
 
       /* =========================
          FLAVOUR
@@ -560,12 +571,49 @@ export default function ProductionPage() {
           ? produced / 600
           : 0;
 
-      /* =========================
-         NYLON
-      ========================== */
+/* =========================
+   NYLON
+   Inventory is stored in PACKS.
+   Production consumes individual PIECES.
+========================= */
 
-      const nylonNeeded =
-        produced;
+const nylonPiecesPerPackMap: Record<string, number> = {
+
+  "Small Iruka": 100,
+  "Small Rosy": 100,
+
+  "Medium Iruka": 200,
+  "Medium Rosy": 200,
+
+  "Big Smart": 200,
+
+  "Classic Iruka": 200,
+  "Classic Fruits": 200,
+
+  "Jumbo Iruka": 200,
+  "Jumbo Fruits": 200,
+
+  "Big Brother Family": 100,
+
+};
+
+const nylonPiecesPerPack =
+  nylonPiecesPerPackMap[selectedProduct];
+
+if (!nylonPiecesPerPack) {
+
+  throw new Error(
+    `Nylon pack size not configured for ${selectedProduct}.`
+  );
+
+}
+
+const nylonPiecesUsed =
+  produced;
+
+const nylonNeeded =
+  nylonPiecesUsed /
+  nylonPiecesPerPack;
 
       /* =========================
          RESINS
@@ -584,101 +632,113 @@ export default function ProductionPage() {
       const resinNeededCartons =
         resinNeededKg / 10;
 
-      /* =========================
-         INVENTORY VALIDATION
-      ========================== */
+/* =========================
+   INVENTORY VALIDATION
+========================= */
 
-      const requiredMaterials = [
+const requiredMaterials = [
 
+  {
+    item: flour,
+    name: "Flour",
+    amount: flourNeeded,
+    historyAmount: flourNeeded,
+  },
+
+  {
+    item: sugar,
+    name: "Sugar",
+    amount: sugarNeeded,
+    historyAmount: sugarNeeded,
+  },
+
+  {
+    item: butter,
+    name: "Butter",
+    amount: butterNeeded,
+    historyAmount: butterNeeded,
+  },
+
+  {
+    item: yeast,
+    name: "Yeast",
+    amount: yeastNeededCartons,
+    historyAmount: yeastNeededCartons,
+  },
+
+  {
+    item: groundnutOil,
+    name: "Groundnut Oil",
+    amount: groundnutOilNeeded,
+    historyAmount: groundnutOilNeeded,
+  },
+
+  {
+    item: recipeInventory,
+    name: recipeName,
+    amount: recipeNeeded,
+    historyAmount: recipeNeeded,
+  },
+
+  {
+    item: flavour,
+    name: "Flavour",
+    amount: flavourNeeded,
+    historyAmount: flavourNeeded,
+  },
+
+  {
+    item: nylon,
+    name: nylonName,
+    amount: nylonNeeded,
+    historyAmount: nylonPiecesUsed,
+  },
+
+ ...(brownNeededKg > 0
+  ? [
+      {
+        item: brown,
+        name: "Brown",
+        amount: brownNeededBuckets,
+        historyAmount: brownNeededKg,
+      },
+    ]
+  : []),
+
+  ...(tapeNeeded > 0
+    ? [
         {
-          item: flour,
-          name: "Flour",
-          amount: flourNeeded,
+          item: tape,
+          name: "Tape",
+          amount: tapeNeeded,
+          historyAmount: tapeNeeded,
         },
+      ]
+    : []),
 
+  ...(twistNeeded > 0
+    ? [
         {
-          item: sugar,
-          name: "Sugar",
-          amount: sugarNeeded,
+          item: twist,
+          name: "Twist",
+          amount: twistNeeded,
+          historyAmount: twistNeeded,
         },
+      ]
+    : []),
 
+  ...(resinNeededCartons > 0
+    ? [
         {
-          item: butter,
-          name: "Butter",
-          amount: butterNeeded,
+          item: resins,
+          name: "Resins",
+          amount: resinNeededCartons,
+          historyAmount: resinNeededCartons,
         },
+      ]
+    : []),
 
-        {
-          item: yeast,
-          name: "Yeast",
-          amount: yeastNeeded,
-        },
-
-        {
-          item: groundnutOil,
-          name: "Groundnut Oil",
-          amount: groundnutOilNeeded,
-        },
-
-        {
-          item: recipeInventory,
-          name: recipeName,
-          amount: recipeNeeded,
-        },
-
-        {
-          item: flavour,
-          name: "Flavour",
-          amount: flavourNeeded,
-        },
-
-        {
-          item: nylon,
-          name: nylonName,
-          amount: nylonNeeded,
-        },
-
-        ...(brownNeeded > 0
-          ? [
-              {
-                item: brown,
-                name: "Brown",
-                amount: brownNeeded,
-              },
-            ]
-          : []),
-
-        ...(tapeNeeded > 0
-          ? [
-              {
-                item: tape,
-                name: "Tape",
-                amount: tapeNeeded,
-              },
-            ]
-          : []),
-
-        ...(twistNeeded > 0
-          ? [
-              {
-                item: twist,
-                name: "Twist",
-                amount: twistNeeded,
-              },
-            ]
-          : []),
-
-        ...(resinNeededCartons > 0
-          ? [
-              {
-                item: resins,
-                name: "Resins",
-                amount: resinNeededCartons,
-              },
-            ]
-          : []),
-
-      ];
+];
 
       /* =========================
          CHECK MATERIALS EXIST
@@ -866,8 +926,8 @@ export default function ProductionPage() {
             material_name:
               material.name,
 
-            quantity_used:
-              material.amount,
+quantity_used:
+  material.historyAmount,
 
             transaction_type:
               "AUTO_DEDUCTION",
@@ -1337,16 +1397,19 @@ export default function ProductionPage() {
       const recipeUsed =
         batches;
 
-      const brownUsed =
-        [
-          "Small Iruka",
-          "Big Smart",
-          "Medium Iruka",
-          "Classic Iruka",
-          "Jumbo Iruka",
-        ].includes(log.bread)
-          ? batches * 0.5
-          : 0;
+const brownUsedKg =
+  [
+    "Small Iruka",
+    "Big Smart",
+    "Medium Iruka",
+    "Classic Iruka",
+    "Jumbo Iruka",
+  ].includes(log.bread)
+    ? batches * 0.2
+    : 0;
+
+const brownUsedBuckets =
+  brownUsedKg / 25;
 
       const flavourUsed =
         batches * 0.25;
@@ -1373,8 +1436,46 @@ export default function ProductionPage() {
           ? produced / 600
           : 0;
 
-      const nylonUsed =
-        produced;
+/* =========================
+   NYLON
+   Inventory is stored in PACKS.
+   Restore the exact number of
+   packs that production consumed.
+========================= */
+
+const nylonPiecesPerPackMap: Record<string, number> = {
+
+  "Small Iruka": 100,
+  "Small Rosy": 100,
+
+  "Medium Iruka": 200,
+  "Medium Rosy": 200,
+
+  "Big Smart": 200,
+
+  "Classic Iruka": 200,
+  "Classic Fruits": 200,
+
+  "Jumbo Iruka": 200,
+  "Jumbo Fruits": 200,
+
+  "Big Brother Family": 100,
+
+};
+
+const nylonPiecesPerPack =
+  nylonPiecesPerPackMap[log.bread];
+
+if (!nylonPiecesPerPack) {
+
+  throw new Error(
+    `Nylon pack size not configured for ${log.bread}.`
+  );
+
+}
+
+const nylonUsed =
+  produced / nylonPiecesPerPack;
 
       const nylonNameMap:
         Record<string, string> = {
@@ -1506,15 +1607,14 @@ export default function ProductionPage() {
 
       ];
 
-      if (brownUsed > 0) {
+if (brownUsedKg > 0) {
 
-        materialsToRestore.push({
-          name: "Brown",
-          amount: brownUsed,
-        });
+  materialsToRestore.push({
+    name: "Brown",
+    amount: brownUsedBuckets,
+  });
 
-      }
-
+}
       if (tapeUsed > 0) {
 
         materialsToRestore.push({

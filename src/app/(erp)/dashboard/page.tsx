@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
+import ProtectedRoute from "@/components/ProtectedRoute";
 import { supabase } from "@/lib/supabase";
 
 import {
@@ -49,7 +50,201 @@ type CustomerSalesSummary = {
   orders: number;
 };
 
+type PeriodKey = "today" | "7days" | "30days" | "all";
+
+const PERIOD_OPTIONS: {
+  key: PeriodKey;
+  label: string;
+}[] = [
+  {
+    key: "today",
+    label: "Today",
+  },
+  {
+    key: "7days",
+    label: "7 Days",
+  },
+  {
+    key: "30days",
+    label: "30 Days",
+  },
+  {
+    key: "all",
+    label: "All Time",
+  },
+];
+
+/* ============================
+      LAGOS TIME HELPERS
+============================ */
+
+function getLagosDateParts() {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  const parts = formatter.formatToParts(new Date());
+
+  const year = Number(
+    parts.find((part) => part.type === "year")?.value
+  );
+
+  const month = Number(
+    parts.find((part) => part.type === "month")?.value
+  );
+
+  const day = Number(
+    parts.find((part) => part.type === "day")?.value
+  );
+
+  return {
+    year,
+    month,
+    day,
+  };
+}
+
+function getLagosDayKey(dateValue: string | Date) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  return formatter.format(new Date(dateValue));
+}
+
+function getLagosGreeting() {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Africa/Lagos",
+      hour: "numeric",
+      hour12: false,
+    }).format(new Date())
+  );
+
+  if (hour >= 5 && hour < 12) {
+    return "Good Morning";
+  }
+
+  if (hour >= 12 && hour < 17) {
+    return "Good Afternoon";
+  }
+
+  if (hour >= 17 && hour < 22) {
+    return "Good Evening";
+  }
+
+  return "Good Night";
+}
+
+function getLagosTime() {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(new Date());
+}
+
+function getLagosDate() {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+}
+
+/* ============================
+      PERIOD HELPERS
+============================ */
+
+function getPeriodLabel(period: PeriodKey) {
+  const option = PERIOD_OPTIONS.find(
+    (item) => item.key === period
+  );
+
+  return option?.label || "All Time";
+}
+
+function getPeriodStartDate(period: PeriodKey) {
+  if (period === "all") {
+    return null;
+  }
+
+  const { year, month, day } = getLagosDateParts();
+
+  const today = new Date(
+    Date.UTC(year, month - 1, day)
+  );
+
+  if (period === "today") {
+    return today;
+  }
+
+  if (period === "7days") {
+    today.setUTCDate(today.getUTCDate() - 6);
+    return today;
+  }
+
+  if (period === "30days") {
+    today.setUTCDate(today.getUTCDate() - 29);
+    return today;
+  }
+
+  return null;
+}
+
+function isDateInsidePeriod(
+  value: string | null | undefined,
+  period: PeriodKey
+) {
+  if (!value) return false;
+
+  if (period === "all") {
+    return true;
+  }
+
+  const startDate = getPeriodStartDate(period);
+
+  if (!startDate) {
+    return true;
+  }
+
+  const dayKey = getLagosDayKey(value);
+
+  const startKey = `${startDate.getUTCFullYear()}-${String(
+    startDate.getUTCMonth() + 1
+  ).padStart(2, "0")}-${String(
+    startDate.getUTCDate()
+  ).padStart(2, "0")}`;
+
+  const { year, month, day } = getLagosDateParts();
+
+  const endKey = `${year}-${String(month).padStart(
+    2,
+    "0"
+  )}-${String(day).padStart(2, "0")}`;
+
+  return dayKey >= startKey && dayKey <= endKey;
+}
+
 export default function DashboardPage() {
+  return (
+    <ProtectedRoute allowedRoles={["admin", "management"]}>
+      <DashboardContent />
+    </ProtectedRoute>
+  );
+}
+
+function DashboardContent() {
   const router = useRouter();
 
   /* ============================
@@ -63,11 +258,44 @@ export default function DashboardPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [debtors, setDebtors] = useState<any[]>([]);
 
-  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
-  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] =
+    useState<any | null>(null);
+
+  const [showOrderModal, setShowOrderModal] =
+    useState(false);
+
+  const [selectedPeriod, setSelectedPeriod] =
+    useState<PeriodKey>("7days");
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const [currentTime, setCurrentTime] = useState(
+    getLagosTime()
+  );
+
+  const [currentGreeting, setCurrentGreeting] =
+    useState(getLagosGreeting());
+
+  /* ============================
+        LIVE CLOCK
+  ============================ */
+
+  useEffect(() => {
+    const updateClock = () => {
+      setCurrentTime(getLagosTime());
+      setCurrentGreeting(getLagosGreeting());
+    };
+
+    updateClock();
+
+    const interval = setInterval(
+      updateClock,
+      1000
+    );
+
+    return () => clearInterval(interval);
+  }, []);
 
   /* ============================
         FETCH DASHBOARD
@@ -99,34 +327,54 @@ export default function DashboardPage() {
           supabase
             .from("orders")
             .select("*")
-            .order("created_at", { ascending: false })
+            .order("created_at", {
+              ascending: false,
+            })
             .limit(10),
 
           supabase.from("debtors").select("*"),
         ]);
 
         if (salesRes.error) {
-          console.error("Sales fetch error:", salesRes.error);
+          console.error(
+            "Sales fetch error:",
+            salesRes.error
+          );
         }
 
         if (productRes.error) {
-          console.error("Products fetch error:", productRes.error);
+          console.error(
+            "Products fetch error:",
+            productRes.error
+          );
         }
 
         if (inventoryRes.error) {
-          console.error("Inventory fetch error:", inventoryRes.error);
+          console.error(
+            "Inventory fetch error:",
+            inventoryRes.error
+          );
         }
 
         if (expenseRes.error) {
-          console.error("Expenses fetch error:", expenseRes.error);
+          console.error(
+            "Expenses fetch error:",
+            expenseRes.error
+          );
         }
 
         if (ordersRes.error) {
-          console.error("Orders fetch error:", ordersRes.error);
+          console.error(
+            "Orders fetch error:",
+            ordersRes.error
+          );
         }
 
         if (debtorRes.error) {
-          console.error("Debtors fetch error:", debtorRes.error);
+          console.error(
+            "Debtors fetch error:",
+            debtorRes.error
+          );
         }
 
         setSales(salesRes.data || []);
@@ -136,7 +384,10 @@ export default function DashboardPage() {
         setRecentOrders(ordersRes.data || []);
         setDebtors(debtorRes.data || []);
       } catch (error) {
-        console.error("Dashboard fetch error:", error);
+        console.error(
+          "Dashboard fetch error:",
+          error
+        );
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -234,7 +485,10 @@ export default function DashboardPage() {
       )
 
       .subscribe((status) => {
-        console.log("Dashboard realtime status:", status);
+        console.log(
+          "Dashboard realtime status:",
+          status
+        );
       });
 
     return () => {
@@ -243,37 +497,72 @@ export default function DashboardPage() {
   }, [fetchDashboard]);
 
   /* ============================
+        FILTERED KPI DATA
+  ============================ */
+
+  const filteredSales = sales.filter((sale) =>
+    isDateInsidePeriod(
+      sale.created_at,
+      selectedPeriod
+    )
+  );
+
+  const filteredExpenses = expenses.filter(
+    (expense) =>
+      isDateInsidePeriod(
+        expense.created_at,
+        selectedPeriod
+      )
+  );
+
+  /* ============================
         KPI CALCULATIONS
   ============================ */
 
-  const revenue = sales.reduce(
-    (sum, sale) => sum + Number(sale.total_amount || 0),
+  const revenue = filteredSales.reduce(
+    (sum, sale) =>
+      sum + Number(sale.total_amount || 0),
     0
   );
 
-  const totalExpenses = expenses.reduce(
-    (sum, expense) => sum + Number(expense.amount || 0),
+  const totalExpenses = filteredExpenses.reduce(
+    (sum, expense) =>
+      sum + Number(expense.amount || 0),
     0
   );
+
+  /* ============================
+        DEBTS REMAIN CURRENT
+  ============================ */
 
   const totalDebts = debtors.reduce(
-    (sum, debtor) => sum + Number(debtor.balance || 0),
+    (sum, debtor) =>
+      sum + Number(debtor.balance || 0),
     0
   );
+
+  /* ============================
+        FLOUR REMAINS CURRENT
+  ============================ */
 
   const flour = inventory.find((item) =>
     item.name?.toLowerCase().includes("flour")
   );
 
-  const flourBags = Number(flour?.quantity || 0);
+  const flourBags = Number(
+    flour?.quantity || 0
+  );
 
   /* ============================
         REVENUE GRAPH
   ============================ */
 
   const revenueChart = Object.values(
-    sales.reduce((acc: any, sale: any) => {
-      const day = new Date(sale.created_at).toLocaleDateString("en-GB", {
+    filteredSales.reduce((acc: any, sale: any) => {
+      const day = new Date(
+        sale.created_at
+      ).toLocaleDateString("en-GB", {
+        timeZone: "Africa/Lagos",
         day: "numeric",
         month: "short",
       });
@@ -285,7 +574,9 @@ export default function DashboardPage() {
         };
       }
 
-      acc[day].sales += Number(sale.total_amount || 0);
+      acc[day].sales += Number(
+        sale.total_amount || 0
+      );
 
       return acc;
     }, {})
@@ -296,7 +587,10 @@ export default function DashboardPage() {
   ============================ */
 
   const stockChart = products
-    .filter((product) => Number(product.stock) > 0)
+    .filter(
+      (product) =>
+        Number(product.stock) > 0
+    )
     .map((product) => ({
       name: product.name,
       value: Number(product.stock),
@@ -306,10 +600,14 @@ export default function DashboardPage() {
         BEST SELLING PRODUCT
   ============================ */
 
-  const productSales: Record<string, ProductSalesSummary> = {};
+  const productSales: Record<
+    string,
+    ProductSalesSummary
+  > = {};
 
   sales.forEach((sale) => {
-    const productName = sale.product_name;
+    const productName =
+      sale.product_name;
 
     if (!productName) return;
 
@@ -320,34 +618,45 @@ export default function DashboardPage() {
       };
     }
 
-    productSales[productName].quantity += Number(sale.quantity || 0);
+    productSales[productName].quantity +=
+      Number(sale.quantity || 0);
 
-    productSales[productName].revenue += Number(
-      sale.total_amount || 0
-    );
+    productSales[productName].revenue +=
+      Number(sale.total_amount || 0);
   });
 
-  const bestSellingProducts = Object.entries(productSales) as [
-    string,
-    ProductSalesSummary
-  ][];
+  const bestSellingProducts =
+    Object.entries(productSales) as [
+      string,
+      ProductSalesSummary
+    ][];
 
-  bestSellingProducts.sort((a, b) => b[1].quantity - a[1].quantity);
+  bestSellingProducts.sort(
+    (a, b) =>
+      b[1].quantity - a[1].quantity
+  );
 
-  const topProduct = bestSellingProducts[0];
+  const topProduct =
+    bestSellingProducts[0];
 
   const bestProduct = products.find(
-    (product) => product.name === topProduct?.[0]
+    (product) =>
+      product.name === topProduct?.[0]
   );
 
   /* ============================
         BEST CUSTOMER
   ============================ */
 
-  const customerSales: Record<string, CustomerSalesSummary> = {};
+  const customerSales: Record<
+    string,
+    CustomerSalesSummary
+  > = {};
 
   sales.forEach((sale) => {
-    const customerName = sale.customer_name || "Walk-in Customer";
+    const customerName =
+      sale.customer_name ||
+      "Walk-in Customer";
 
     if (!customerSales[customerName]) {
       customerSales[customerName] = {
@@ -356,47 +665,33 @@ export default function DashboardPage() {
       };
     }
 
-    customerSales[customerName].total += Number(
-      sale.total_amount || 0
-    );
+    customerSales[customerName].total +=
+      Number(sale.total_amount || 0);
 
     customerSales[customerName].orders += 1;
   });
 
-  const bestCustomers = Object.entries(customerSales) as [
-    string,
-    CustomerSalesSummary
-  ][];
+  const bestCustomers =
+    Object.entries(customerSales) as [
+      string,
+      CustomerSalesSummary
+    ][];
 
-  bestCustomers.sort((a, b) => b[1].total - a[1].total);
+  bestCustomers.sort(
+    (a, b) =>
+      b[1].total - a[1].total
+  );
 
-  const topCustomer = bestCustomers[0];
+  const topCustomer =
+    bestCustomers[0];
 
-  const averageOrderValue = topCustomer
-    ? topCustomer[1].total / topCustomer[1].orders
-    : 0;
+  const averageOrderValue =
+    topCustomer
+      ? topCustomer[1].total /
+        topCustomer[1].orders
+      : 0;
 
-  /* ============================
-        LOADING
-  ============================ */
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#08111f]">
-        <div className="text-center">
-          <div className="w-14 h-14 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-
-          <h2 className="text-white text-2xl font-bold mt-6">
-            Loading Dashboard...
-          </h2>
-
-          <p className="text-slate-500 mt-2">
-            Connecting to live business data
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   /* ============================
         DASHBOARD
@@ -422,12 +717,13 @@ export default function DashboardPage() {
           />
 
           <div>
+
             <p className="text-blue-400 text-lg font-semibold">
-              👋 Good Evening,
+              👋 {currentGreeting},
             </p>
 
             <h1 className="text-5xl font-black text-white mt-2">
-              Chika
+              Admin
             </h1>
 
             <p className="text-slate-400 mt-2 text-lg">
@@ -435,32 +731,67 @@ export default function DashboardPage() {
             </p>
 
             <p className="text-slate-500 mt-1">
-              NKIRUKA / IRUKA INDUSTRIES LTD
-            </p>
-
-            <p className="text-slate-500 mt-1">
               Real-time Business Intelligence
             </p>
+
           </div>
 
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
 
+          {/* DATE FILTER */}
+
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-1.5 shadow-xl flex items-center">
+
+            {PERIOD_OPTIONS.map(
+              (option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() =>
+                    setSelectedPeriod(
+                      option.key
+                    )
+                  }
+                  className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition ${
+                    selectedPeriod ===
+                    option.key
+                      ? "bg-blue-600 text-white shadow-lg"
+                      : "text-slate-400 hover:text-white hover:bg-slate-800"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              )
+            )}
+
+          </div>
+
           {/* REFRESH BUTTON */}
 
           <button
             type="button"
-            onClick={() => fetchDashboard(true)}
+            onClick={() =>
+              fetchDashboard(true)
+            }
             disabled={refreshing}
             className="flex items-center justify-center gap-3 bg-slate-800 border border-slate-700 hover:bg-slate-700 disabled:opacity-60 disabled:cursor-not-allowed text-white px-6 py-4 rounded-2xl transition shadow-xl"
           >
+
             <RefreshCw
               size={19}
-              className={refreshing ? "animate-spin" : ""}
+              className={
+                refreshing
+                  ? "animate-spin"
+                  : ""
+              }
             />
 
-            {refreshing ? "Refreshing..." : "Refresh"}
+            {refreshing
+              ? "Refreshing..."
+              : "Refresh"}
+
           </button>
 
           <div className="bg-slate-900 border border-slate-700 rounded-3xl px-8 py-6 shadow-2xl">
@@ -470,15 +801,14 @@ export default function DashboardPage() {
             </p>
 
             <h2 className="text-white text-2xl font-bold mt-1">
-              {new Date().toLocaleDateString("en-GB", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
+              {getLagosDate()}
             </h2>
 
-            <p className="text-yellow-400 mt-2 font-semibold">
+            <p className="text-blue-400 mt-2 font-semibold">
+              {currentTime}
+            </p>
+
+            <p className="text-yellow-400 mt-1 font-semibold">
               CEO Analytics Center
             </p>
 
@@ -528,7 +858,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="mt-6 text-sm text-green-300">
-            {sales.length} Transactions
+            {filteredSales.length} Transactions
           </div>
 
         </div>
@@ -567,7 +897,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="mt-6 text-sm text-blue-300">
-            {expenses.length} Expense Records
+            {filteredExpenses.length} Expense Records
           </div>
 
         </div>
@@ -709,7 +1039,9 @@ export default function DashboardPage() {
               height="100%"
             >
 
-              <AreaChart data={revenueChart}>
+              <AreaChart
+                data={revenueChart}
+              >
 
                 <defs>
 
@@ -795,7 +1127,7 @@ export default function DashboardPage() {
               </p>
 
               <h2 className="mt-2 text-3xl font-bold text-blue-400">
-                {sales.length}
+                {filteredSales.length}
               </h2>
 
             </div>
@@ -809,9 +1141,10 @@ export default function DashboardPage() {
               <h2 className="mt-2 text-3xl font-bold text-yellow-400">
 
                 ₦
-                {sales.length > 0
+                {filteredSales.length > 0
                   ? Math.round(
-                      revenue / sales.length
+                      revenue /
+                        filteredSales.length
                     ).toLocaleString()
                   : "0"}
 
@@ -839,8 +1172,6 @@ export default function DashboardPage() {
 
           </div>
 
-          {/* FIXED PIE CONTAINER */}
-
           <div className="w-full h-[190px] flex items-center justify-center overflow-hidden">
 
             {stockChart.length > 0 ? (
@@ -865,14 +1196,21 @@ export default function DashboardPage() {
                     endAngle={-270}
                   >
 
-                    {stockChart.map((entry, index) => (
+                    {stockChart.map(
+                      (entry, index) => (
 
-                      <Cell
-                        key={`stock-${entry.name}-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                      />
+                        <Cell
+                          key={`stock-${entry.name}-${index}`}
+                          fill={
+                            COLORS[
+                              index %
+                                COLORS.length
+                            ]
+                          }
+                        />
 
-                    ))}
+                      )
+                    )}
 
                   </Pie>
 
@@ -932,7 +1270,10 @@ export default function DashboardPage() {
 
                 {products.reduce(
                   (sum, p) =>
-                    sum + Number(p.stock || 0),
+                    sum +
+                    Number(
+                      p.stock || 0
+                    ),
                   0
                 )}
 
@@ -945,7 +1286,10 @@ export default function DashboardPage() {
           <div className="mt-3 space-y-2">
 
             {[...stockChart]
-              .sort((a, b) => b.value - a.value)
+              .sort(
+                (a, b) =>
+                  b.value - a.value
+              )
               .slice(0, 5)
               .map((item, index) => (
 
@@ -960,7 +1304,10 @@ export default function DashboardPage() {
                       className="h-3 w-3 rounded-full flex-shrink-0"
                       style={{
                         background:
-                          COLORS[index % COLORS.length],
+                          COLORS[
+                            index %
+                              COLORS.length
+                          ],
                       }}
                     />
 
@@ -1012,7 +1359,10 @@ export default function DashboardPage() {
                     bestProduct?.image_url ||
                     "/placeholder.png"
                   }
-                  alt={bestProduct?.name || "Product"}
+                  alt={
+                    bestProduct?.name ||
+                    "Product"
+                  }
                   className="w-20 h-20 object-contain"
                 />
 
@@ -1021,7 +1371,8 @@ export default function DashboardPage() {
               <div className="min-w-0">
 
                 <h3 className="text-2xl font-bold text-white">
-                  {bestProduct?.name || "No Sales"}
+                  {bestProduct?.name ||
+                    "No Sales"}
                 </h3>
 
                 <p className="text-green-400 mt-2">
@@ -1034,7 +1385,8 @@ export default function DashboardPage() {
 
                 <h2 className="text-3xl font-black text-white">
                   {topProduct
-                    ? topProduct[1].quantity
+                    ? topProduct[1]
+                        .quantity
                     : 0}
                 </h2>
 
@@ -1051,7 +1403,8 @@ export default function DashboardPage() {
                       ₦
                       {topProduct
                         ? Number(
-                            topProduct[1].revenue
+                            topProduct[1]
+                              .revenue
                           ).toLocaleString()
                         : "0"}
 
@@ -1070,8 +1423,10 @@ export default function DashboardPage() {
                       ₦
                       {topProduct
                         ? Math.round(
-                            topProduct[1].revenue /
-                              topProduct[1].quantity
+                            topProduct[1]
+                              .revenue /
+                              topProduct[1]
+                                .quantity
                           ).toLocaleString()
                         : "0"}
 
@@ -1118,7 +1473,8 @@ export default function DashboardPage() {
               <div>
 
                 <h3 className="text-xl font-bold text-white">
-                  {topCustomer?.[0] ?? "No Customer"}
+                  {topCustomer?.[0] ??
+                    "No Customer"}
                 </h3>
 
                 <p className="text-purple-300 mt-2">
@@ -1130,7 +1486,8 @@ export default function DashboardPage() {
                   ₦
                   {topCustomer
                     ? Number(
-                        topCustomer[1].total
+                        topCustomer[1]
+                          .total
                       ).toLocaleString()
                     : "0"}
 
@@ -1145,7 +1502,8 @@ export default function DashboardPage() {
                     </span>
 
                     <span className="text-white font-bold">
-                      {topCustomer?.[1].orders ?? 0}
+                      {topCustomer?.[1]
+                        .orders ?? 0}
                     </span>
 
                   </div>
@@ -1230,155 +1588,167 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
 
-            {products.map((product) => {
+            {products.map(
+              (product) => {
 
-              const stock = Number(product.stock || 0);
+                const stock = Number(
+                  product.stock || 0
+                );
 
-              const percentage = Math.min(
-                (stock / 5000) * 100,
-                100
-              );
+                const percentage =
+                  Math.min(
+                    (stock / 5000) * 100,
+                    100
+                  );
 
-              return (
+                return (
 
-                <button
-                  type="button"
-                  key={product.id}
-                  onClick={() =>
-                    router.push(`/products/${product.id}?from=dashboard`)
-                  }
-                  className="text-left bg-[#111c2d] border border-slate-700 rounded-3xl overflow-hidden hover:border-blue-500 transition duration-300 hover:-translate-y-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
+                  <button
+                    type="button"
+                    key={product.id}
+                    onClick={() =>
+                      router.push(
+                        `/products/${product.id}?from=dashboard`
+                      )
+                    }
+                    className="text-left bg-[#111c2d] border border-slate-700 rounded-3xl overflow-hidden hover:border-blue-500 transition duration-300 hover:-translate-y-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
 
-                  <div className="bg-slate-800 h-44 flex items-center justify-center">
+                    <div className="bg-slate-800 h-44 flex items-center justify-center">
 
-                    <img
-                      src={
-                        product.image_url ||
-                        "/placeholder.png"
-                      }
-                      alt={product.name}
-                      className="h-32 object-contain"
-                    />
-
-                  </div>
-
-                  <div className="p-5">
-
-                    <h3 className="text-xl font-bold text-white">
-                      {product.name}
-                    </h3>
-
-                    <p className="text-slate-400 text-sm mt-1">
-                      SKU: {product.sku || "N/A"}
-                    </p>
-
-                    <div className="mt-5">
-
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          stock > 300
-                            ? "bg-green-600/20 text-green-400"
-                            : stock > 100
-                            ? "bg-yellow-600/20 text-yellow-400"
-                            : "bg-red-600/20 text-red-400"
-                        }`}
-                      >
-                        {stock > 300
-                          ? "In Stock"
-                          : stock > 100
-                          ? "Running Low"
-                          : "Critical"}
-                      </span>
+                      <img
+                        src={
+                          product.image_url ||
+                          "/placeholder.png"
+                        }
+                        alt={product.name}
+                        className="h-32 object-contain"
+                      />
 
                     </div>
 
-                    <div className="mt-5">
+                    <div className="p-5">
 
-                      <h2 className="text-4xl font-black text-white">
-                        {stock.toLocaleString()}
-                      </h2>
+                      <h3 className="text-xl font-bold text-white">
+                        {product.name}
+                      </h3>
 
-                      <p className="text-slate-400">
-                        Units Available
+                      <p className="text-slate-400 text-sm mt-1">
+                        SKU:{" "}
+                        {product.sku ||
+                          "N/A"}
                       </p>
 
-                    </div>
+                      <div className="mt-5">
 
-                    <div className="mt-5 flex justify-between">
-
-                      <span className="text-slate-400">
-                        Price
-                      </span>
-
-                      <span className="text-green-400 font-bold">
-
-                        ₦
-                        {Number(
-                          product.price || 0
-                        ).toLocaleString()}
-
-                      </span>
-
-                    </div>
-
-                    <div className="mt-6">
-
-                      <div className="bg-slate-700 rounded-full h-2">
-
-                        <div
-                          className={`h-2 rounded-full ${
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
                             stock > 300
-                              ? "bg-green-500"
+                              ? "bg-green-600/20 text-green-400"
                               : stock > 100
-                              ? "bg-yellow-500"
-                              : "bg-red-500"
+                              ? "bg-yellow-600/20 text-yellow-400"
+                              : "bg-red-600/20 text-red-400"
                           }`}
-                          style={{
-                            width: `${percentage}%`,
-                          }}
-                        />
+                        >
+                          {stock > 300
+                            ? "In Stock"
+                            : stock > 100
+                            ? "Running Low"
+                            : "Critical"}
+                        </span>
 
                       </div>
 
-                    </div>
+                      <div className="mt-5">
 
-                    <div className="mt-6 border-t border-slate-700 pt-4">
+                        <h2 className="text-4xl font-black text-white">
+                          {stock.toLocaleString()}
+                        </h2>
 
-                      <div className="flex justify-between text-sm">
+                        <p className="text-slate-400">
+                          Units Available
+                        </p>
+
+                      </div>
+
+                      <div className="mt-5 flex justify-between">
 
                         <span className="text-slate-400">
-                          Inventory Value
+                          Price
                         </span>
 
                         <span className="text-green-400 font-bold">
 
                           ₦
-                          {(
-                            Number(
-                              product.stock || 0
-                            ) *
-                            Number(
-                              product.price || 0
-                            )
+                          {Number(
+                            product.price ||
+                              0
                           ).toLocaleString()}
 
                         </span>
 
                       </div>
 
+                      <div className="mt-6">
+
+                        <div className="bg-slate-700 rounded-full h-2">
+
+                          <div
+                            className={`h-2 rounded-full ${
+                              stock > 300
+                                ? "bg-green-500"
+                                : stock > 100
+                                ? "bg-yellow-500"
+                                : "bg-red-500"
+                            }`}
+                            style={{
+                              width: `${percentage}%`,
+                            }}
+                          />
+
+                        </div>
+
+                      </div>
+
+                      <div className="mt-6 border-t border-slate-700 pt-4">
+
+                        <div className="flex justify-between text-sm">
+
+                          <span className="text-slate-400">
+                            Inventory Value
+                          </span>
+
+                          <span className="text-green-400 font-bold">
+
+                            ₦
+                            {(
+                              Number(
+                                product.stock ||
+                                  0
+                              ) *
+                              Number(
+                                product.price ||
+                                  0
+                              )
+                            ).toLocaleString()}
+
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                      <div className="mt-4 text-blue-400 text-sm font-semibold">
+                        Click to view product →
+                      </div>
+
                     </div>
 
-                    <div className="mt-4 text-blue-400 text-sm font-semibold">
-                      Click to view product →
-                    </div>
+                  </button>
 
-                  </div>
-
-                </button>
-
-              );
-            })}
+                );
+              }
+            )}
 
           </div>
 
@@ -1475,92 +1845,113 @@ export default function DashboardPage() {
 
               <tbody>
 
-                {recentOrders.map((order) => (
+                {recentOrders.map(
+                  (order) => (
 
-                  <tr
-                    key={order.id}
-                    className="border-b border-slate-800 hover:bg-slate-800 transition"
-                  >
+                    <tr
+                      key={order.id}
+                      className="border-b border-slate-800 hover:bg-slate-800 transition"
+                    >
 
-                    <td className="py-5">
+                      <td className="py-5">
 
-                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3">
 
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold">
 
-                          {(order.customer_name || "C").charAt(0)}
+                            {(
+                              order.customer_name ||
+                              "C"
+                            ).charAt(0)}
+
+                          </div>
+
+                          <div>
+
+                            <h3 className="font-semibold text-white">
+                              {order.customer_name ||
+                                "Customer"}
+                            </h3>
+
+                          </div>
 
                         </div>
 
-                        <div>
+                      </td>
 
-                          <h3 className="font-semibold text-white">
-                            {order.customer_name || "Customer"}
-                          </h3>
+                      <td className="text-slate-300 font-medium">
+                        {order.order_number ||
+                          order.id}
+                      </td>
 
-                        </div>
+                      <td className="text-center">
 
-                      </div>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            order.status ===
+                            "Completed"
+                              ? "bg-green-500/20 text-green-400"
+                              : order.status ===
+                                "Pending"
+                              ? "bg-yellow-500/20 text-yellow-300"
+                              : "bg-blue-500/20 text-blue-400"
+                          }`}
+                        >
+                          {order.status ||
+                            "Processing"}
+                        </span>
 
-                    </td>
+                      </td>
 
-                    <td className="text-slate-300 font-medium">
-                      {order.order_number || order.id}
-                    </td>
+                      <td className="text-right font-bold text-green-400">
 
-                    <td className="text-center">
+                        ₦
+                        {Number(
+                          order.total_amount ||
+                            0
+                        ).toLocaleString()}
 
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          order.status === "Completed"
-                            ? "bg-green-500/20 text-green-400"
-                            : order.status === "Pending"
-                            ? "bg-yellow-500/20 text-yellow-300"
-                            : "bg-blue-500/20 text-blue-400"
-                        }`}
-                      >
-                        {order.status || "Processing"}
-                      </span>
+                      </td>
 
-                    </td>
+                      <td className="text-center text-slate-400">
 
-                    <td className="text-right font-bold text-green-400">
+                        {order.created_at
+                          ? new Date(
+                              order.created_at
+                            ).toLocaleDateString(
+                              "en-GB",
+                              {
+                                timeZone:
+                                  "Africa/Lagos",
+                              }
+                            )
+                          : "-"}
 
-                      ₦
-                      {Number(
-                        order.total_amount || 0
-                      ).toLocaleString()}
+                      </td>
 
-                    </td>
+                      <td className="text-center">
 
-                    <td className="text-center text-slate-400">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedOrder(
+                              order
+                            );
+                            setShowOrderModal(
+                              true
+                            );
+                          }}
+                          className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 transition text-white font-semibold"
+                        >
+                          View Details
+                        </button>
 
-                      {order.created_at
-                        ? new Date(
-                            order.created_at
-                          ).toLocaleDateString("en-GB")
-                        : "-"}
+                      </td>
 
-                    </td>
+                    </tr>
 
-                    <td className="text-center">
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setShowOrderModal(true);
-                        }}
-                        className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 transition text-white font-semibold"
-                      >
-                        View Details
-                      </button>
-
-                    </td>
-
-                  </tr>
-
-                ))}
+                  )
+                )}
 
               </tbody>
 
@@ -1576,112 +1967,126 @@ export default function DashboardPage() {
             ORDER DETAILS MODAL
       ============================ */}
 
-      {showOrderModal && selectedOrder && (
+      {showOrderModal &&
+        selectedOrder && (
 
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
 
-          <div className="bg-slate-900 w-[650px] max-w-[95%] rounded-3xl border border-slate-700 p-8">
+            <div className="bg-slate-900 w-[650px] max-w-[95%] rounded-3xl border border-slate-700 p-8">
 
-            <div className="flex justify-between items-center mb-8">
+              <div className="flex justify-between items-center mb-8">
 
-              <h2 className="text-3xl font-bold text-white">
-                Order Details
-              </h2>
-
-              <button
-                type="button"
-                onClick={() => setShowOrderModal(false)}
-                className="text-slate-400 hover:text-white text-2xl"
-              >
-                ✕
-              </button>
-
-            </div>
-
-            <div className="space-y-5">
-
-              <div>
-
-                <p className="text-slate-400">
-                  Customer
-                </p>
-
-                <h3 className="text-xl font-bold text-white">
-                  {selectedOrder.customer_name || "Customer"}
-                </h3>
-
-              </div>
-
-              <div>
-
-                <p className="text-slate-400">
-                  Order Number
-                </p>
-
-                <h3 className="text-white">
-                  {selectedOrder.order_number || selectedOrder.id}
-                </h3>
-
-              </div>
-
-              <div>
-
-                <p className="text-slate-400">
-                  Total Amount
-                </p>
-
-                <h2 className="text-3xl font-black text-green-400">
-                  ₦
-                  {Number(
-                    selectedOrder.total_amount || 0
-                  ).toLocaleString()}
+                <h2 className="text-3xl font-bold text-white">
+                  Order Details
                 </h2>
 
-              </div>
-
-              <div>
-
-                <p className="text-slate-400">
-                  Status
-                </p>
-
-                <h3 className="text-blue-400">
-                  {selectedOrder.status || "Processing"}
-                </h3>
-
-              </div>
-
-              <div>
-
-                <p className="text-slate-400">
-                  Payment Status
-                </p>
-
-                <h3 className="text-green-400">
-                  {selectedOrder.payment_status || "Unknown"}
-                </h3>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowOrderModal(
+                      false
+                    )
+                  }
+                  className="text-slate-400 hover:text-white text-2xl"
+                >
+                  ✕
+                </button>
 
               </div>
 
-            </div>
+              <div className="space-y-5">
 
-            <div className="mt-8 flex justify-end">
+                <div>
 
-              <button
-                type="button"
-                onClick={() => setShowOrderModal(false)}
-                className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-xl text-white"
-              >
-                Close
-              </button>
+                  <p className="text-slate-400">
+                    Customer
+                  </p>
+
+                  <h3 className="text-xl font-bold text-white">
+                    {selectedOrder.customer_name ||
+                      "Customer"}
+                  </h3>
+
+                </div>
+
+                <div>
+
+                  <p className="text-slate-400">
+                    Order Number
+                  </p>
+
+                  <h3 className="text-white">
+                    {selectedOrder.order_number ||
+                      selectedOrder.id}
+                  </h3>
+
+                </div>
+
+                <div>
+
+                  <p className="text-slate-400">
+                    Total Amount
+                  </p>
+
+                  <h2 className="text-3xl font-black text-green-400">
+                    ₦
+                    {Number(
+                      selectedOrder.total_amount ||
+                        0
+                    ).toLocaleString()}
+                  </h2>
+
+                </div>
+
+                <div>
+
+                  <p className="text-slate-400">
+                    Status
+                  </p>
+
+                  <h3 className="text-blue-400">
+                    {selectedOrder.status ||
+                      "Processing"}
+                  </h3>
+
+                </div>
+
+                <div>
+
+                  <p className="text-slate-400">
+                    Payment Status
+                  </p>
+
+                  <h3 className="text-green-400">
+                    {selectedOrder.payment_status ||
+                      "Unknown"}
+                  </h3>
+
+                </div>
+
+              </div>
+
+              <div className="mt-8 flex justify-end">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowOrderModal(
+                      false
+                    )
+                  }
+                  className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-xl text-white"
+                >
+                  Close
+                </button>
+
+              </div>
 
             </div>
 
           </div>
 
-        </div>
-
-      )}
+        )}
 
     </div>
   );

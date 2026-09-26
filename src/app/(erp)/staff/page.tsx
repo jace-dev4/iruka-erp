@@ -979,108 +979,131 @@ async function generateStaffId() {
      UPDATE STAFF
   ====================================================== */
 
-  async function updateStaff() {
-    if (!editingStaff) return;
+async function updateStaff() {
+  if (!editingStaff) return;
 
-    try {
-      setSavingStaff(true);
+  try {
+    setSavingStaff(true);
 
-      let cvUrl = editingStaff.cv_url || null;
+    let cvUrl = editingStaff.cv_url || null;
 
-      /* ==========================
-         UPLOAD NEW CV IF SELECTED
-      ========================== */
+    /* ==========================
+       UPLOAD NEW CV IF SELECTED
+    ========================== */
 
-      if (editingStaff.new_cv_file) {
-        const cvFile =
-          editingStaff.new_cv_file as File;
+    if (editingStaff.new_cv_file) {
+      const cvFile =
+        editingStaff.new_cv_file as File;
 
-        const cvName =
-          `${Date.now()}-${cvFile.name}`;
+      const cvName =
+        `${Date.now()}-${cvFile.name}`;
 
-        const { error: cvError } =
-          await supabase.storage
-            .from("staff-cv")
-            .upload(cvName, cvFile);
+      const { error: cvError } =
+        await supabase.storage
+          .from("staff-cv")
+          .upload(cvName, cvFile);
 
-        if (cvError) {
-          toast.error(cvError.message);
-          return;
-        }
-
-        const { data } =
-          supabase.storage
-            .from("staff-cv")
-            .getPublicUrl(cvName);
-
-        cvUrl = data.publicUrl;
-      }
-
-      /* ==========================
-         UPDATE STAFF RECORD
-      ========================== */
-
-      const { error } =
-        await supabase
-          .from("staff")
-          .update({
-            full_name:
-              editingStaff.full_name,
-
-            phone_number:
-              editingStaff.phone_number,
-
-            gender:
-              editingStaff.gender,
-
-            department:
-              editingStaff.department,
-
-            position:
-              editingStaff.position,
-
-            salary:
-              Number(editingStaff.salary),
-
-            employment_status:
-              editingStaff.employment_status,
-
-            cv_url: cvUrl,
-          })
-          .eq(
-            "id",
-            editingStaff.id
-          );
-
-      if (error) {
-        toast.error(error.message);
+      if (cvError) {
+        toast.error(cvError.message);
         return;
       }
 
-      toast.success(
-        "Staff information updated successfully."
-      );
+      const { data } =
+        supabase.storage
+          .from("staff-cv")
+          .getPublicUrl(cvName);
 
-      setShowEditModal(false);
-      setEditingStaff(null);
-
-      await fetchData();
-
-    } catch (error: any) {
-      console.error(
-        "Staff update error:",
-        error
-      );
-
-      toast.error(
-        error?.message ||
-          "Unable to update staff."
-      );
-
-    } finally {
-      setSavingStaff(false);
+      cvUrl = data.publicUrl;
     }
+
+    /* ==========================
+       UPDATE COMPLETE STAFF RECORD
+    ========================== */
+
+    const { error } =
+      await supabase
+        .from("staff")
+        .update({
+          full_name:
+            editingStaff.full_name,
+
+          phone_number:
+            editingStaff.phone_number,
+
+          gender:
+            editingStaff.gender,
+
+          date_of_birth:
+            editingStaff.date_of_birth ||
+            null,
+
+          address:
+            editingStaff.address,
+
+          emergency_contact:
+            editingStaff.emergency_contact,
+
+          department:
+            editingStaff.department,
+
+          position:
+            editingStaff.position,
+
+          date_joined:
+            editingStaff.date_joined,
+
+          salary:
+            Number(editingStaff.salary),
+
+          bank_name:
+            editingStaff.bank_name,
+
+          account_name:
+            editingStaff.account_name,
+
+          account_number:
+            editingStaff.account_number,
+
+          employment_status:
+            editingStaff.employment_status,
+
+          cv_url:
+            cvUrl,
+        })
+        .eq(
+          "id",
+          editingStaff.id
+        );
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success(
+      "All staff information updated successfully."
+    );
+
+    setShowEditModal(false);
+    setEditingStaff(null);
+
+    await fetchData();
+
+  } catch (error: any) {
+    console.error(
+      "Staff update error:",
+      error
+    );
+
+    toast.error(
+      error?.message ||
+        "Unable to update staff."
+    );
+
+  } finally {
+    setSavingStaff(false);
   }
+}
   /* =====================================================
      UPLOAD STAFF PHOTO
   ====================================================== */
@@ -3119,9 +3142,9 @@ async function generateStaffId() {
 
         {showEditModal &&
           editingStaff && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-6">
+<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-6 overflow-y-auto">
 
-              <div className="relative w-full max-w-5xl rounded-[28px] bg-white shadow-[0_35px_90px_rgba(0,0,0,0.25)] overflow-hidden">
+  <div className="relative w-full max-w-5xl max-h-[calc(100vh-3rem)] rounded-[28px] bg-white shadow-[0_35px_90px_rgba(0,0,0,0.25)] overflow-y-auto">
 
                 <div className="flex items-center justify-between border-b border-slate-200 px-10 py-7">
 
@@ -3276,229 +3299,446 @@ async function generateStaffId() {
 
 </div>
 
-                  <div className="grid grid-cols-2 gap-x-10 gap-y-8">
+<div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
 
-                    <div>
+  {/* ==========================
+      STAFF ID
+  ========================== */}
 
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
-                        Full Name
-                      </label>
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Staff ID
+    </label>
 
-                      <input
-                        type="text"
-                        value={
-                          editingStaff.full_name
-                        }
-                        onChange={(e) =>
-                          setEditingStaff({
-                            ...editingStaff,
-                            full_name:
-                              e.target.value,
-                          })
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
-                      />
+    <input
+      type="text"
+      value={
+        editingStaff.staff_id ||
+        ""
+      }
+      readOnly
+      className="w-full rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 font-bold text-blue-900 cursor-not-allowed"
+    />
 
-                    </div>
+    <p className="mt-2 text-xs text-slate-400">
+      Staff ID is permanent and cannot be changed.
+    </p>
+  </div>
 
-                    <div>
+  {/* ==========================
+      FULL NAME
+  ========================== */}
 
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
-                        Phone Number
-                      </label>
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Full Name
+    </label>
 
-                      <input
-                        type="text"
-                        value={
-                          editingStaff.phone_number
-                        }
-                        onChange={(e) =>
-                          setEditingStaff({
-                            ...editingStaff,
-                            phone_number:
-                              e.target.value,
-                          })
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
-                      />
+    <input
+      type="text"
+      value={
+        editingStaff.full_name ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          full_name:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
 
-                    </div>
+  {/* ==========================
+      PHONE
+  ========================== */}
 
-<div>
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Phone Number
+    </label>
 
-  <label className="block text-sm font-semibold text-slate-700 mb-2">
-    Department
-  </label>
+    <input
+      type="text"
+      value={
+        editingStaff.phone_number ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          phone_number:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
 
-  <select
-    value={
-      editingStaff.department ||
-      ""
-    }
-    onChange={(e) =>
-      setEditingStaff({
-        ...editingStaff,
-        department:
-          e.target.value,
-      })
-    }
-    className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none bg-white"
-  >
+  {/* ==========================
+      GENDER
+  ========================== */}
 
-    <option value="">
-      Select Department
-    </option>
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Gender
+    </label>
 
-    {DEPARTMENTS.map(
-      (dept) => (
-        <option
-          key={dept}
-          value={dept}
-        >
-          {dept}
-        </option>
-      )
-    )}
+    <select
+      value={
+        editingStaff.gender ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          gender:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none bg-white"
+    >
+      <option value="">
+        Select Gender
+      </option>
 
-  </select>
+      <option value="Male">
+        Male
+      </option>
+
+      <option value="Female">
+        Female
+      </option>
+    </select>
+  </div>
+
+  {/* ==========================
+      DATE OF BIRTH
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Date of Birth
+    </label>
+
+    <input
+      type="date"
+      value={
+        editingStaff.date_of_birth ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          date_of_birth:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
+
+  {/* ==========================
+      HOME ADDRESS
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Home Address
+    </label>
+
+    <input
+      type="text"
+      value={
+        editingStaff.address ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          address:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
+
+  {/* ==========================
+      EMERGENCY CONTACT
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Emergency Contact
+    </label>
+
+    <input
+      type="text"
+      value={
+        editingStaff.emergency_contact ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          emergency_contact:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
+
+  {/* ==========================
+      DEPARTMENT
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Department
+    </label>
+
+    <select
+      value={
+        editingStaff.department ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          department:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none bg-white"
+    >
+      <option value="">
+        Select Department
+      </option>
+
+      {DEPARTMENTS.map(
+        (dept) => (
+          <option
+            key={dept}
+            value={dept}
+          >
+            {dept}
+          </option>
+        )
+      )}
+    </select>
+  </div>
+
+  {/* ==========================
+      POSITION
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Position / Job Title
+    </label>
+
+    <input
+      type="text"
+      value={
+        editingStaff.position ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          position:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
+
+  {/* ==========================
+      DATE JOINED
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Date Joined
+    </label>
+
+    <input
+      type="date"
+      value={
+        editingStaff.date_joined ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          date_joined:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
+
+  {/* ==========================
+      SALARY
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Monthly Salary
+    </label>
+
+    <input
+      type="number"
+      value={
+        editingStaff.salary ??
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          salary:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
+
+  {/* ==========================
+      BANK NAME
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Bank Name
+    </label>
+
+    <input
+      type="text"
+      value={
+        editingStaff.bank_name ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          bank_name:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
+
+  {/* ==========================
+      ACCOUNT NAME
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Account Name
+    </label>
+
+    <input
+      type="text"
+      value={
+        editingStaff.account_name ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          account_name:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
+
+  {/* ==========================
+      ACCOUNT NUMBER
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Account Number
+    </label>
+
+    <input
+      type="text"
+      inputMode="numeric"
+      value={
+        editingStaff.account_number ||
+        ""
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          account_number:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
+    />
+  </div>
+
+  {/* ==========================
+      EMPLOYMENT STATUS
+  ========================== */}
+
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 mb-2">
+      Employment Status
+    </label>
+
+    <select
+      value={
+        editingStaff.employment_status ||
+        "Active"
+      }
+      onChange={(e) =>
+        setEditingStaff({
+          ...editingStaff,
+          employment_status:
+            e.target.value,
+        })
+      }
+      className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none bg-white"
+    >
+      <option value="Active">
+        🟢 Active
+      </option>
+
+      <option value="On Leave">
+        🟡 On Leave
+      </option>
+
+      <option value="Suspended">
+        🟠 Suspended
+      </option>
+
+      <option value="Terminated">
+        🔴 Terminated
+      </option>
+
+      <option value="Resigned">
+        ⚫ Resigned
+      </option>
+
+      <option value="Retired">
+        🔵 Retired
+      </option>
+    </select>
+  </div>
 
 </div>
-
-                    <div>
-
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
-                        Position
-                      </label>
-
-                      <input
-                        type="text"
-                        value={
-                          editingStaff.position ||
-                          ""
-                        }
-                        onChange={(e) =>
-                          setEditingStaff({
-                            ...editingStaff,
-                            position:
-                              e.target.value,
-                          })
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
-                      />
-
-                    </div>
-
-                    <div>
-
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
-                        Salary
-                      </label>
-
-                      <input
-                        type="number"
-                        value={
-                          editingStaff.salary ||
-                          ""
-                        }
-                        onChange={(e) =>
-                          setEditingStaff({
-                            ...editingStaff,
-                            salary:
-                              e.target.value,
-                          })
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
-                      />
-
-                    </div>
-
-                    <div>
-
-  <label className="block text-sm font-semibold text-slate-700 mb-2">
-    Gender
-  </label>
-
-  <select
-    value={
-      editingStaff.gender ||
-      ""
-    }
-    onChange={(e) =>
-      setEditingStaff({
-        ...editingStaff,
-        gender:
-          e.target.value,
-      })
-    }
-    className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none bg-white"
-  >
-
-    <option value="">
-      Select Gender
-    </option>
-
-    <option value="Male">
-      Male
-    </option>
-
-    <option value="Female">
-      Female
-    </option>
-
-  </select>
-
-</div>
-
-                    <div>
-
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">
-                        Employment Status
-                      </label>
-
-                      <select
-                        value={
-                          editingStaff.employment_status ||
-                          "Active"
-                        }
-                        onChange={(e) =>
-                          setEditingStaff({
-                            ...editingStaff,
-                            employment_status:
-                              e.target.value,
-                          })
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none"
-                      >
-
-                        <option value="Active">
-                          🟢 Active
-                        </option>
-
-                        <option value="On Leave">
-                          🟡 On Leave
-                        </option>
-
-                        <option value="Suspended">
-                          🟠 Suspended
-                        </option>
-
-                        <option value="Terminated">
-                          🔴 Terminated
-                        </option>
-
-                        <option value="Resigned">
-                          ⚫ Resigned
-                        </option>
-
-                        <option value="Retired">
-                          🔵 Retired
-                        </option>
-
-                      </select>
-
-                    </div>
-
-                  </div>
 
                   <div className="mt-12 border-t border-slate-200 pt-8 flex items-center justify-end gap-4">
 

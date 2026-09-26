@@ -84,10 +84,12 @@ export default function OrderDetailsPage() {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
+        timeZone: "Africa/Lagos",
       }),
       time: date.toLocaleTimeString("en-NG", {
         hour: "2-digit",
         minute: "2-digit",
+        timeZone: "Africa/Lagos",
       }),
     };
   }
@@ -95,11 +97,9 @@ export default function OrderDetailsPage() {
   function printReceipt() {
     setPrinting(true);
 
-    // Give React a moment to render the print state
     setTimeout(() => {
       window.print();
 
-      // Restore normal ERP screen after print dialog closes
       setTimeout(() => {
         setPrinting(false);
       }, 500);
@@ -139,10 +139,10 @@ export default function OrderDetailsPage() {
 
           html,
           body {
-            width: 80mm;
+            width: 80mm !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: white !important;
+            background: #ffffff !important;
           }
 
           body * {
@@ -160,12 +160,13 @@ export default function OrderDetailsPage() {
             left: 0 !important;
             top: 0 !important;
             width: 80mm !important;
+            box-sizing: border-box !important;
             margin: 0 !important;
-            padding: 4mm !important;
-            background: white !important;
-            color: black !important;
+            padding: 5mm 4mm !important;
+            background: #ffffff !important;
+            color: #000000 !important;
             font-family: Arial, Helvetica, sans-serif !important;
-            font-size: 11px !important;
+            font-size: 10px !important;
             line-height: 1.35 !important;
           }
 
@@ -604,87 +605,54 @@ export default function OrderDetailsPage() {
 
       <div id="thermal-receipt">
 
-        {/* BUSINESS NAME */}
+        {/* BUSINESS HEADER */}
 
         <div
           style={{
             textAlign: "center",
-            fontWeight: "900",
-            fontSize: "19px",
-            lineHeight: "1.1",
-            marginBottom: "3px",
+            marginBottom: "8px",
           }}
         >
-          NKIRUKA
+          <div
+            style={{
+              fontWeight: "900",
+              fontSize: "17px",
+              letterSpacing: "0.4px",
+            }}
+          >
+            NKIRUKA / IRUKA
+          </div>
+
+          <div
+            style={{
+              fontWeight: "900",
+              fontSize: "13px",
+              marginTop: "2px",
+              letterSpacing: "0.3px",
+            }}
+          >
+            QUALITY BREAD
+          </div>
         </div>
+
+        <div
+          style={{
+            borderBottom: "1px dashed #000",
+            margin: "7px 0",
+          }}
+        />
+
+        {/* RECEIPT INFO */}
 
         <div
           style={{
             textAlign: "center",
             fontWeight: "700",
             fontSize: "12px",
+            marginBottom: "6px",
           }}
         >
-          IRUKA INDUSTRIES LTD
-        </div>
-
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: "10px",
-            marginTop: "3px",
-          }}
-        >
-          BAKERY &amp; FOOD PRODUCTS
-        </div>
-
-        <div
-          style={{
-            borderBottom: "1px dashed #000",
-            margin: "8px 0",
-          }}
-        />
-
-        {/* RECEIPT TITLE */}
-
-        <div
-          style={{
-            textAlign: "center",
-            fontWeight: "900",
-            fontSize: "15px",
-            marginBottom: "5px",
-          }}
-        >
-          CUSTOMER ORDER RECEIPT
-        </div>
-
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: "10px",
-          }}
-        >
-          ORIGINAL
-        </div>
-
-        <div
-          style={{
-            borderBottom: "1px dashed #000",
-            margin: "8px 0",
-          }}
-        />
-
-        {/* ORDER INFORMATION */}
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontWeight: "700",
-          }}
-        >
-          <span>Order No:</span>
-          <span>{order.order_number}</span>
+          CUSTOMER RECEIPT
         </div>
 
         <div
@@ -693,7 +661,19 @@ export default function OrderDetailsPage() {
             justifyContent: "space-between",
           }}
         >
-          <span>Date:</span>
+          <span>Receipt No.</span>
+          <span style={{ fontWeight: "700" }}>
+            {order.order_number}
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>Date</span>
           <span>{dateTime.date}</span>
         </div>
 
@@ -703,57 +683,66 @@ export default function OrderDetailsPage() {
             justifyContent: "space-between",
           }}
         >
-          <span>Time:</span>
+          <span>Time</span>
           <span>{dateTime.time}</span>
         </div>
-
-        <div
-          style={{
-            borderBottom: "1px dashed #000",
-            margin: "8px 0",
-          }}
-        />
 
         {/* CUSTOMER */}
 
         <div
           style={{
-            fontWeight: "900",
-            marginBottom: "3px",
+            borderBottom: "1px dashed #000",
+            margin: "7px 0",
+          }}
+        />
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
           }}
         >
-          CUSTOMER
+          <span>Customer</span>
+          <span
+            style={{
+              fontWeight: "700",
+              maxWidth: "55%",
+              textAlign: "right",
+              wordBreak: "break-word",
+            }}
+          >
+            {order.customer_name || "Walk-in Customer"}
+          </span>
         </div>
 
-        <div>
-          Name: {order.customer_name || "Walk-in Customer"}
-        </div>
-
-        <div>
-          Phone: {order.phone || "-"}
-        </div>
-
-        {order.delivery_date && (
-          <div>
-            Delivery: {order.delivery_date}
+        {order.phone && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+            }}
+          >
+            <span>Phone</span>
+            <span>{order.phone}</span>
           </div>
         )}
+
+        {/* ITEMS */}
 
         <div
           style={{
             borderBottom: "1px dashed #000",
-            margin: "8px 0",
+            margin: "7px 0",
           }}
         />
-
-        {/* ITEMS HEADER */}
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 35px 65px",
+            gridTemplateColumns: "1fr 32px 68px",
             gap: "3px",
             fontWeight: "900",
+            fontSize: "9px",
             borderBottom: "1px solid #000",
             paddingBottom: "4px",
           }}
@@ -763,20 +752,17 @@ export default function OrderDetailsPage() {
           <span style={{ textAlign: "right" }}>AMOUNT</span>
         </div>
 
-        {/* ITEMS */}
-
         {items.map((item) => (
-
           <div
             key={item.id}
             style={{
               marginTop: "6px",
             }}
           >
-
             <div
               style={{
                 fontWeight: "700",
+                fontSize: "10px",
                 wordBreak: "break-word",
               }}
             >
@@ -786,28 +772,32 @@ export default function OrderDetailsPage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 35px 65px",
+                gridTemplateColumns: "1fr 32px 68px",
                 gap: "3px",
+                fontSize: "9px",
               }}
             >
-
               <span>
-                ₦{formatMoney(item.unit_price)} each
+                ₦{formatMoney(item.unit_price)} / unit
               </span>
 
               <span style={{ textAlign: "center" }}>
                 {item.quantity}
               </span>
 
-              <span style={{ textAlign: "right", fontWeight: "700" }}>
+              <span
+                style={{
+                  textAlign: "right",
+                  fontWeight: "700",
+                }}
+              >
                 ₦{formatMoney(item.total_amount)}
               </span>
-
             </div>
-
           </div>
-
         ))}
+
+        {/* TOTALS */}
 
         <div
           style={{
@@ -816,15 +806,13 @@ export default function OrderDetailsPage() {
           }}
         />
 
-        {/* TOTALS */}
-
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
           }}
         >
-          <span>Total Items:</span>
+          <span>Items</span>
           <span>{getTotalQuantity()}</span>
         </div>
 
@@ -833,23 +821,27 @@ export default function OrderDetailsPage() {
             display: "flex",
             justifyContent: "space-between",
             fontWeight: "900",
-            fontSize: "15px",
+            fontSize: "14px",
             marginTop: "5px",
           }}
         >
-          <span>GRAND TOTAL:</span>
-          <span>₦{formatMoney(order.total_amount)}</span>
+          <span>TOTAL</span>
+          <span>
+            ₦{formatMoney(order.total_amount)}
+          </span>
         </div>
 
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
-            marginTop: "5px",
+            marginTop: "4px",
           }}
         >
-          <span>Amount Paid:</span>
-          <span>₦{formatMoney(getAmountPaid())}</span>
+          <span>Paid</span>
+          <span>
+            ₦{formatMoney(getAmountPaid())}
+          </span>
         </div>
 
         <div
@@ -860,9 +852,13 @@ export default function OrderDetailsPage() {
             marginTop: "3px",
           }}
         >
-          <span>BALANCE:</span>
-          <span>₦{formatMoney(getBalance())}</span>
+          <span>Balance</span>
+          <span>
+            ₦{formatMoney(getBalance())}
+          </span>
         </div>
+
+        {/* STATUS */}
 
         <div
           style={{
@@ -871,16 +867,14 @@ export default function OrderDetailsPage() {
           }}
         />
 
-        {/* PAYMENT */}
-
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
           }}
         >
-          <span>Payment:</span>
-          <span style={{ fontWeight: "900" }}>
+          <span>Payment</span>
+          <span style={{ fontWeight: "700" }}>
             {order.payment_status || "Pending"}
           </span>
         </div>
@@ -891,8 +885,8 @@ export default function OrderDetailsPage() {
             justifyContent: "space-between",
           }}
         >
-          <span>Order Status:</span>
-          <span style={{ fontWeight: "900" }}>
+          <span>Status</span>
+          <span style={{ fontWeight: "700" }}>
             {order.order_status || "Pending"}
           </span>
         </div>
@@ -908,14 +902,19 @@ export default function OrderDetailsPage() {
               }}
             />
 
-            <div style={{ fontWeight: "900" }}>
-              NOTES
+            <div
+              style={{
+                fontWeight: "700",
+                marginBottom: "2px",
+              }}
+            >
+              Note
             </div>
 
             <div
               style={{
+                fontSize: "9px",
                 wordBreak: "break-word",
-                marginTop: "3px",
               }}
             >
               {order.notes}
@@ -923,20 +922,20 @@ export default function OrderDetailsPage() {
           </>
         )}
 
+        {/* FOOTER */}
+
         <div
           style={{
             borderBottom: "1px dashed #000",
-            margin: "10px 0",
+            margin: "9px 0",
           }}
         />
-
-        {/* FOOTER */}
 
         <div
           style={{
             textAlign: "center",
             fontWeight: "900",
-            fontSize: "12px",
+            fontSize: "11px",
           }}
         >
           THANK YOU FOR YOUR ORDER
@@ -945,18 +944,18 @@ export default function OrderDetailsPage() {
         <div
           style={{
             textAlign: "center",
-            fontSize: "10px",
-            marginTop: "4px",
+            fontSize: "9px",
+            marginTop: "3px",
           }}
         >
-          NKIRUKA — FRESH BREAD, EVERY DAY
+          Fresh Bread, Every Day
         </div>
 
         <div
           style={{
             textAlign: "center",
-            fontSize: "9px",
-            marginTop: "8px",
+            fontSize: "8px",
+            marginTop: "7px",
           }}
         >
           Please keep this receipt for your records.
@@ -964,7 +963,7 @@ export default function OrderDetailsPage() {
 
         <div
           style={{
-            height: "12mm",
+            height: "8mm",
           }}
         />
 

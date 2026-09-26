@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+import ProtectedRoute from "@/components/ProtectedRoute";
+
 import ExecutiveHeader from "@/components/analytics/ExecutiveHeader";
 
 import RevenueChart from "@/components/analytics/RevenueChart";
@@ -119,15 +121,24 @@ export default function AnalyticsPage() {
       }
 
       if (productionRes.error) {
-        console.error("Analytics Production Error:", productionRes.error);
+        console.error(
+          "Analytics Production Error:",
+          productionRes.error
+        );
       }
 
       if (inventoryRes.error) {
-        console.error("Analytics Inventory Error:", inventoryRes.error);
+        console.error(
+          "Analytics Inventory Error:",
+          inventoryRes.error
+        );
       }
 
       if (expensesRes.error) {
-        console.error("Analytics Expenses Error:", expensesRes.error);
+        console.error(
+          "Analytics Expenses Error:",
+          expensesRes.error
+        );
       }
 
       setSales(salesRes.data || []);
@@ -260,7 +271,9 @@ export default function AnalyticsPage() {
       const monthExpenses = expenses.filter((expense: any) => {
         if (!expense.created_at) return false;
 
-        return new Date(expense.created_at).getMonth() === index;
+        return (
+          new Date(expense.created_at).getMonth() === index
+        );
       });
 
       const revenue = monthSales.reduce(
@@ -716,122 +729,112 @@ export default function AnalyticsPage() {
   }
 
   /* =========================================================
-     LOADING
-  ========================================================= */
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
-        <div className="text-center">
-
-          <div className="text-xl font-bold">
-            Loading Analytics...
-          </div>
-
-          <p className="text-slate-400 mt-2">
-            Preparing your business intelligence dashboard.
-          </p>
-
-        </div>
-      </div>
-    );
-  }
-
-  /* =========================================================
      PAGE
   ========================================================= */
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6">
+    <ProtectedRoute
+      allowedRoles={[
+        "admin",
+        "management",
+        "accountant",
+      ]}
+    >
+      {loading ? (
+        <div className="min-h-screen bg-slate-950" />
+      ) : (
+        <div className="min-h-screen bg-slate-950 p-6">
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+          {/* =====================================================
+              HEADER
+          ===================================================== */}
 
-      <ExecutiveHeader
-        period={period}
-        setPeriod={setPeriod}
-        onRefresh={fetchAnalytics}
-        onExport={exportReport}
-      />
+          <ExecutiveHeader
+            period={period}
+            setPeriod={setPeriod}
+            onRefresh={fetchAnalytics}
+            onExport={exportReport}
+          />
 
-      {/* =====================================================
-          REVENUE + PRODUCTION
-      ===================================================== */}
+          {/* =====================================================
+              REVENUE + PRODUCTION
+          ===================================================== */}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-8">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-8">
 
-        <RevenueChart
-          data={revenueChartData}
-        />
+            <RevenueChart
+              data={revenueChartData}
+            />
 
-        <ProductionChart
-          data={productionChartData}
-        />
+            <ProductionChart
+              data={productionChartData}
+            />
 
-      </div>
+          </div>
 
-      {/* =====================================================
-          SALES + CUSTOMER GROWTH
-      ===================================================== */}
+          {/* =====================================================
+              SALES + CUSTOMER GROWTH
+          ===================================================== */}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-8">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-8">
 
-        <SalesChart
-          data={salesChartData}
-        />
+            <SalesChart
+              data={salesChartData}
+            />
 
-        <CustomerGrowthChart
-          data={
-            customerPerformanceChartData
-          }
-        />
+            <CustomerGrowthChart
+              data={
+                customerPerformanceChartData
+              }
+            />
 
-      </div>
+          </div>
 
-      {/* =====================================================
-          INVENTORY
-      ===================================================== */}
+          {/* =====================================================
+              INVENTORY
+          ===================================================== */}
 
-      <div className="mt-8">
+          <div className="mt-8">
 
-        <InventoryChart
-          data={inventoryChartData}
-        />
+            <InventoryChart
+              data={inventoryChartData}
+            />
 
-      </div>
+          </div>
 
-      {/* =====================================================
-          BEST SELLING + TOP CUSTOMERS
-      ===================================================== */}
+          {/* =====================================================
+              BEST SELLING + TOP CUSTOMERS
+          ===================================================== */}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-8">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-8">
 
-        <BestSellingProducts
-          products={
-            bestSellingProducts
-          }
-        />
+            <BestSellingProducts
+              products={
+                bestSellingProducts
+              }
+            />
 
-        <TopCustomers
-          customers={topCustomers}
-        />
+            <TopCustomers
+              customers={topCustomers}
+            />
 
-      </div>
+          </div>
 
-      {/* =====================================================
-          CUSTOMER ANALYTICS
-      ===================================================== */}
+          {/* =====================================================
+              CUSTOMER ANALYTICS
+          ===================================================== */}
 
-      <div className="mt-8">
+          <div className="mt-8">
 
-        <CustomerAnalytics
-          customers={customers}
-          orders={orders}
-        />
+            <CustomerAnalytics
+              customers={customers}
+              orders={orders}
+            />
 
-      </div>
+          </div>
 
-    </div>
+        </div>
+      )}
+    </ProtectedRoute>
   );
 }

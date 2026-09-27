@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { supabase } from "@/lib/supabase";
 
@@ -12,7 +18,6 @@ type Customer = {
   id: string;
   full_name: string;
   phone: string | null;
-  password?: string | null;
   is_verified?: boolean | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -26,7 +31,7 @@ type Customer = {
 };
 
 type Order = {
-  id: string;
+  id: string | number;
   customer_id?: string | null;
   customer_name?: string | null;
   phone?: string | null;
@@ -36,13 +41,22 @@ type Order = {
 };
 
 type Sale = {
-  id: string;
+  id: string | number;
   customer_id?: string | null;
   customer_name?: string | null;
   customer_phone?: string | null;
   phone?: string | null;
   total_amount?: number | null;
   created_at?: string | null;
+};
+
+type Debtor = {
+  id: string | number;
+  customer_id?: string | null;
+  customer_name?: string | null;
+  phone?: string | null;
+  balance?: number | null;
+  status?: string | null;
 };
 
 type CustomerMessage = {
@@ -66,6 +80,7 @@ type CustomerStats = {
   revenue: number;
   highestPurchase: number;
   averageOrder: number;
+  balanceDue: number;
   firstOrder: string | null;
   lastOrder: string | null;
   recentOrders: Order[];
@@ -127,18 +142,36 @@ const getInitials = (name: string) => {
 const generateCustomerCode = () =>
   `IRK-${Math.floor(100000 + Math.random() * 900000)}`;
 
-const statusClasses = (status?: string | null) => {
-  const value = normalize(status);
+const customerStatusClasses = (status?: string | null) => {
+  const value = normalize(status || "Active");
 
   if (value === "active") {
-    return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+    return "bg-green-100 text-green-700";
+  }
+
+  if (value === "pending") {
+    return "bg-yellow-100 text-yellow-700";
   }
 
   if (value === "inactive") {
-    return "bg-red-100 text-red-700 border border-red-200";
+    return "bg-red-100 text-red-700";
   }
 
-  return "bg-amber-100 text-amber-700 border border-amber-200";
+  return "bg-slate-100 text-slate-700";
+};
+
+const getLagosGreeting = () => {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-NG", {
+      hour: "numeric",
+      hour12: false,
+      timeZone: "Africa/Lagos",
+    }).format(new Date())
+  );
+
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
 };
 
 /* =========================================================
@@ -146,30 +179,37 @@ const statusClasses = (status?: string | null) => {
 ========================================================= */
 
 export default function CustomerPage() {
-  /* =========================
+  /* =========================================================
      DATA
-  ========================== */
+  ========================================================== */
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
+const [customers, setCustomers] = useState<Customer[]>([]);
+const [orders, setOrders] = useState<Order[]>([]);
+const [sales, setSales] = useState<Sale[]>([]);
+const [debtors, setDebtors] = useState<Debtor[]>([]);
 
-  const [customerMessages, setCustomerMessages] = useState<
-    CustomerMessage[]
-  >([]);
+  const [customerMessages, setCustomerMessages] =
+    useState<CustomerMessage[]>([]);
 
-  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesLoading, setMessagesLoading] =
+    useState(false);
 
-  /* =========================
+  /* =========================================================
      UI STATE
-  ========================== */
+  ========================================================== */
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState("");
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
-  const [selectedCustomer, setSelectedCustomer] =
+  const [search, setSearch] = useState("");
+
+  const [openActionMenu, setOpenActionMenu] =
+    useState<string | null>(null);
+
+  const [showProfileModal, setShowProfileModal] =
+    useState(false);
+
+  const [profileCustomer, setProfileCustomer] =
     useState<CustomerStats | null>(null);
 
   const [editingCustomer, setEditingCustomer] =
@@ -189,16 +229,39 @@ export default function CustomerPage() {
     message: string;
   } | null>(null);
 
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] =
+    useState(new Date());
 
-  const [savingCustomer, setSavingCustomer] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [savingCustomer, setSavingCustomer] =
+    useState(false);
 
-  const [messageText, setMessageText] = useState("");
-  const [sendingMessage, setSendingMessage] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] =
+    useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [deleting, setDeleting] =
+    useState(false);
+
+    const [creatingPortalAccount, setCreatingPortalAccount] =
+  useState(false);
+
+const [portalPassword, setPortalPassword] =
+  useState("");
+
+const [showPortalPassword, setShowPortalPassword] =
+  useState(false);
+
+  const [messageText, setMessageText] =
+    useState("");
+
+  const [sendingMessage, setSendingMessage] =
+    useState(false);
+
+  const fileInputRef =
+    useRef<HTMLInputElement | null>(null);
+
+  /* =========================================================
+     EDIT FORM
+  ========================================================== */
 
   const [editForm, setEditForm] = useState({
     full_name: "",
@@ -244,52 +307,149 @@ export default function CustomerPage() {
   ========================================================== */
 
   const loadCustomers = async () => {
-    const { data, error } = await supabase
-      .from("customers")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("customers")
+        .select(
+          "id, full_name, phone, is_verified, created_at, updated_at, customer_type, address, status, customer_code, photo_url, email, user_id"
+        )
+        .order("created_at", {
+          ascending: false,
+        });
 
-    if (error) {
-      console.error("Customer load error:", error);
+      if (error) {
+        console.error(
+          "CUSTOMER LOAD ERROR:",
+          error
+        );
 
-      showNotification(
-        "error",
-        "Unable to load customers."
+        showNotification(
+          "error",
+          "Unable to load customers."
+        );
+
+        return;
+      }
+
+      const loadedCustomers =
+        (data || []) as Customer[];
+
+      /* -----------------------------------------------------
+         GENERATE CUSTOMER CODES WHEN MISSING
+      ----------------------------------------------------- */
+
+      const usedCodes = new Set(
+        loadedCustomers
+          .map(
+            (customer) =>
+              customer.customer_code
+          )
+          .filter(Boolean)
       );
 
-      return;
-    }
+      for (const customer of loadedCustomers) {
+        if (!customer.customer_code) {
+          let newCode =
+            generateCustomerCode();
 
-    const loadedCustomers = (data || []) as Customer[];
+          while (
+            usedCodes.has(newCode)
+          ) {
+            newCode =
+              generateCustomerCode();
+          }
 
-    const usedCodes = new Set(
-      loadedCustomers
-        .map((customer) => customer.customer_code)
-        .filter(Boolean)
-    );
+          usedCodes.add(newCode);
 
-    for (const customer of loadedCustomers) {
-      if (!customer.customer_code) {
-        let newCode = generateCustomerCode();
+          const {
+            data: codeRows,
+            error: codeError,
+          } = await supabase
+            .from("customers")
+            .update({
+              customer_code:
+                newCode,
+            })
+            .eq(
+              "id",
+              customer.id
+            )
+            .select(
+              "id, customer_code"
+            )
+            .maybeSingle();
 
-        while (usedCodes.has(newCode)) {
-          newCode = generateCustomerCode();
+          if (codeError) {
+            console.error(
+              "CUSTOMER CODE UPDATE ERROR:",
+              codeError
+            );
+          } else if (!codeRows) {
+            console.warn(
+              "CUSTOMER CODE UPDATE RETURNED NO ROW:",
+              customer.id
+            );
+          }
+
+          customer.customer_code =
+            newCode;
         }
-
-        usedCodes.add(newCode);
-
-        await supabase
-          .from("customers")
-          .update({
-            customer_code: newCode,
-          })
-          .eq("id", customer.id);
-
-        customer.customer_code = newCode;
       }
-    }
 
-    setCustomers(loadedCustomers);
+      /* -----------------------------------------------------
+         UPDATE DIRECTORY
+      ----------------------------------------------------- */
+
+      setCustomers(
+        [...loadedCustomers]
+      );
+
+      /* -----------------------------------------------------
+         UPDATE OPEN PROFILE WITH FRESH DATA
+      ----------------------------------------------------- */
+
+      setProfileCustomer(
+        (currentProfile) => {
+          if (!currentProfile) {
+            return currentProfile;
+          }
+
+          const freshCustomer =
+            loadedCustomers.find(
+              (customer) =>
+                customer.id ===
+                currentProfile.customer.id
+            );
+
+          if (!freshCustomer) {
+            return currentProfile;
+          }
+
+          return {
+            ...currentProfile,
+            customer:
+              freshCustomer,
+            name:
+              freshCustomer.full_name ||
+              "Unnamed Customer",
+            phone:
+              freshCustomer.phone ||
+              "No phone",
+            customerCode:
+              freshCustomer.customer_code ||
+              "—",
+          };
+        }
+      );
+    } catch (error) {
+      console.error(
+        "UNEXPECTED CUSTOMER LOAD ERROR:",
+        error
+      );
+    }
   };
 
   /* =========================================================
@@ -300,14 +460,22 @@ export default function CustomerPage() {
     const { data, error } = await supabase
       .from("orders")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (error) {
-      console.error("Orders load error:", error);
+      console.error(
+        "ORDERS LOAD ERROR:",
+        error
+      );
+
       return;
     }
 
-    setOrders((data || []) as Order[]);
+    setOrders(
+      (data || []) as Order[]
+    );
   };
 
   /* =========================================================
@@ -318,40 +486,81 @@ export default function CustomerPage() {
     const { data, error } = await supabase
       .from("sales")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (error) {
-      console.error("Sales load error:", error);
+      console.error(
+        "SALES LOAD ERROR:",
+        error
+      );
+
       return;
     }
 
-    setSales((data || []) as Sale[]);
+    setSales(
+      (data || []) as Sale[]
+    );
   };
 
   /* =========================================================
+   LOAD DEBTORS
+========================================================= */
+
+const loadDebtors = async () => {
+  const { data, error } = await supabase
+    .from("debtors")
+    .select(
+      "id, customer_id, customer_name, phone, balance, status"
+    );
+
+  if (error) {
+    console.error(
+      "DEBTORS LOAD ERROR:",
+      error
+    );
+
+    return;
+  }
+
+  setDebtors(
+    (data || []) as Debtor[]
+  );
+};
+
+  /* =========================================================
      LOAD CUSTOMER MESSAGES
-     
-     This is intentionally tolerant of the table not existing
-     yet. The customer portal will use this area later.
   ========================================================== */
 
-  const loadCustomerMessages = async (customerId: string) => {
+  const loadCustomerMessages = async (
+    customerId: string
+  ) => {
     setMessagesLoading(true);
 
     try {
-      const { data, error } = await supabase
+      const {
+        data,
+        error,
+      } = await supabase
         .from("customer_messages")
         .select("*")
-        .eq("customer_id", customerId)
-        .order("created_at", { ascending: false });
+        .eq(
+          "customer_id",
+          customerId
+        )
+        .order("created_at", {
+          ascending: false,
+        });
 
       if (error) {
         console.warn(
-          "Customer messages are not available yet:",
+          "CUSTOMER MESSAGES UNAVAILABLE:",
           error.message
         );
 
         setCustomerMessages([]);
+
         return;
       }
 
@@ -360,7 +569,7 @@ export default function CustomerPage() {
       );
     } catch (error) {
       console.warn(
-        "Customer message loading unavailable:",
+        "CUSTOMER MESSAGE LOADING ERROR:",
         error
       );
 
@@ -374,21 +583,29 @@ export default function CustomerPage() {
      LOAD ALL
   ========================================================== */
 
-  const loadAll = async (isRefresh = false) => {
+  const loadAll = async (
+    isRefresh = false
+  ) => {
     if (isRefresh) {
       setRefreshing(true);
     } else {
       setLoading(true);
     }
 
-    await Promise.all([
-      loadCustomers(),
-      loadOrders(),
-      loadSales(),
-    ]);
+await Promise.all([
+  loadCustomers(),
+  loadOrders(),
+  loadSales(),
+  loadDebtors(),
+]);
 
     if (isRefresh) {
       setRefreshing(false);
+
+      showNotification(
+        "success",
+        "Customer records refreshed successfully."
+      );
     } else {
       setLoading(false);
     }
@@ -399,314 +616,551 @@ export default function CustomerPage() {
   }, []);
 
   /* =========================================================
-     REALTIME
+     REALTIME - CUSTOMERS / ORDERS / SALES
   ========================================================== */
 
   useEffect(() => {
-    const customersChannel = supabase
-      .channel("customer-page-customers")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "customers",
-        },
-        () => {
-          loadCustomers();
-        }
-      )
-      .subscribe();
-
-    const ordersChannel = supabase
-      .channel("customer-page-orders")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-        },
-        () => {
-          loadOrders();
-        }
-      )
-      .subscribe();
-
-    const salesChannel = supabase
-      .channel("customer-page-sales")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "sales",
-        },
-        () => {
-          loadSales();
-        }
-      )
-      .subscribe();
-
-    const messagesChannel = supabase
-      .channel("customer-page-messages")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "customer_messages",
-        },
-        () => {
-          if (selectedCustomer?.customer.id) {
-            loadCustomerMessages(
-              selectedCustomer.customer.id
-            );
+    const customersChannel =
+      supabase
+        .channel(
+          "customer-page-customers"
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "customers",
+          },
+          () => {
+            loadCustomers();
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+
+    const ordersChannel =
+      supabase
+        .channel(
+          "customer-page-orders"
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "orders",
+          },
+          () => {
+            loadOrders();
+          }
+        )
+        .subscribe();
+
+    const salesChannel =
+      supabase
+        .channel(
+          "customer-page-sales"
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "sales",
+          },
+          () => {
+            loadSales();
+          }
+        )
+        .subscribe();
+
+        const debtorsChannel =
+  supabase
+    .channel(
+      "customer-page-debtors"
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "debtors",
+      },
+      () => {
+        loadDebtors();
+      }
+    )
+    .subscribe();
+
+return () => {
+  supabase.removeChannel(
+    customersChannel
+  );
+
+  supabase.removeChannel(
+    ordersChannel
+  );
+
+  supabase.removeChannel(
+    salesChannel
+  );
+
+  supabase.removeChannel(
+    debtorsChannel
+  );
+};
+  }, []);
+
+  /* =========================================================
+     REALTIME - CUSTOMER MESSAGES
+  ========================================================== */
+
+  useEffect(() => {
+    const messagesChannel =
+      supabase
+        .channel(
+          "customer-page-messages"
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "customer_messages",
+          },
+          () => {
+            if (
+              profileCustomer?.customer.id
+            ) {
+              loadCustomerMessages(
+                profileCustomer.customer.id
+              );
+            }
+          }
+        )
+        .subscribe();
 
     return () => {
-      supabase.removeChannel(customersChannel);
-      supabase.removeChannel(ordersChannel);
-      supabase.removeChannel(salesChannel);
-      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(
+        messagesChannel
+      );
     };
-  }, [selectedCustomer?.customer.id]);
+  }, [
+    profileCustomer?.customer.id,
+  ]);
 
   /* =========================================================
      CUSTOMER STATS
   ========================================================== */
 
-  const customerStats = useMemo<CustomerStats[]>(() => {
-    return customers.map((customer) => {
-      const customerId = normalize(customer.id);
-      const customerPhone = normalize(customer.phone);
-      const customerName = normalize(customer.full_name);
+  const customerStats =
+    useMemo<CustomerStats[]>(() => {
+      return customers.map(
+        (customer) => {
+          const customerId =
+            normalize(customer.id);
 
-      const matchedOrders = orders.filter((order) => {
-        if (
-          order.customer_id &&
-          normalize(order.customer_id) === customerId
-        ) {
-          return true;
+          const customerPhone =
+            normalize(customer.phone);
+
+          const customerName =
+            normalize(
+              customer.full_name
+            );
+
+            const debtor =
+  debtors.find((item) => {
+    if (
+      item.customer_id &&
+      normalize(
+        item.customer_id
+      ) === customerId
+    ) {
+      return true;
+    }
+
+    const debtorPhone =
+      String(
+        item.phone || ""
+      )
+        .replace(/\s+/g, "")
+        .trim();
+
+    const normalizedCustomerPhone =
+      String(
+        customer.phone || ""
+      )
+        .replace(/\s+/g, "")
+        .trim();
+
+    if (
+      normalizedCustomerPhone &&
+      debtorPhone ===
+        normalizedCustomerPhone
+    ) {
+      return true;
+    }
+
+    return false;
+  });
+
+const balanceDue = Math.max(
+  Number(
+    debtor?.balance || 0
+  ),
+  0
+);
+
+          const matchedOrders =
+            orders.filter(
+              (order) => {
+                if (
+                  order.customer_id &&
+                  normalize(
+                    order.customer_id
+                  ) === customerId
+                ) {
+                  return true;
+                }
+
+                if (
+                  customerPhone &&
+                  normalize(
+                    order.phone
+                  ) === customerPhone
+                ) {
+                  return true;
+                }
+
+                if (
+                  customerName &&
+                  normalize(
+                    order.customer_name
+                  ) === customerName
+                ) {
+                  return true;
+                }
+
+                return false;
+              }
+            );
+
+          const matchedSales =
+            sales.filter(
+              (sale) => {
+                if (
+                  sale.customer_id &&
+                  normalize(
+                    sale.customer_id
+                  ) === customerId
+                ) {
+                  return true;
+                }
+
+                const salePhone =
+                  normalize(
+                    sale.customer_phone ||
+                      sale.phone
+                  );
+
+                if (
+                  customerPhone &&
+                  salePhone ===
+                    customerPhone
+                ) {
+                  return true;
+                }
+
+                if (
+                  customerName &&
+                  normalize(
+                    sale.customer_name
+                  ) === customerName
+                ) {
+                  return true;
+                }
+
+                return false;
+              }
+            );
+
+          const orderRevenue =
+            matchedOrders.reduce(
+              (sum, order) =>
+                sum +
+                Number(
+                  order.total_amount || 0
+                ),
+              0
+            );
+
+          const salesRevenue =
+            matchedSales.reduce(
+              (sum, sale) =>
+                sum +
+                Number(
+                  sale.total_amount || 0
+                ),
+              0
+            );
+
+          const revenue =
+            matchedOrders.length > 0
+              ? orderRevenue
+              : salesRevenue;
+
+          const totalOrders =
+            matchedOrders.length > 0
+              ? matchedOrders.length
+              : matchedSales.length;
+
+          const allAmounts = [
+            ...matchedOrders.map(
+              (item) =>
+                Number(
+                  item.total_amount || 0
+                )
+            ),
+            ...matchedSales.map(
+              (item) =>
+                Number(
+                  item.total_amount || 0
+                )
+            ),
+          ];
+
+          const highestPurchase =
+            allAmounts.length > 0
+              ? Math.max(...allAmounts)
+              : 0;
+
+          const allDates = [
+            ...matchedOrders
+              .map(
+                (item) =>
+                  item.created_at
+              )
+              .filter(
+                Boolean
+              ) as string[],
+
+            ...matchedSales
+              .map(
+                (item) =>
+                  item.created_at
+              )
+              .filter(
+                Boolean
+              ) as string[],
+          ].sort(
+            (a, b) =>
+              new Date(a).getTime() -
+              new Date(b).getTime()
+          );
+
+          const firstOrder =
+            allDates.length > 0
+              ? allDates[0]
+              : null;
+
+          const lastOrder =
+            allDates.length > 0
+              ? allDates[
+                  allDates.length - 1
+                ]
+              : null;
+
+return {
+  customer,
+  name:
+    customer.full_name ||
+    "Unnamed Customer",
+  phone:
+    customer.phone ||
+    "No phone",
+  customerCode:
+    customer.customer_code ||
+    "—",
+  orders: totalOrders,
+  revenue,
+  highestPurchase,
+  averageOrder:
+    totalOrders > 0
+      ? revenue /
+        totalOrders
+      : 0,
+  balanceDue,
+  firstOrder,
+  lastOrder,
+  recentOrders:
+    matchedOrders.slice(
+      0,
+      5
+    ),
+          };
         }
-
-        if (
-          customerPhone &&
-          normalize(order.phone) === customerPhone
-        ) {
-          return true;
-        }
-
-        if (
-          customerName &&
-          normalize(order.customer_name) === customerName
-        ) {
-          return true;
-        }
-
-        return false;
-      });
-
-      const matchedSales = sales.filter((sale) => {
-        if (
-          sale.customer_id &&
-          normalize(sale.customer_id) === customerId
-        ) {
-          return true;
-        }
-
-        const salePhone = normalize(
-          sale.customer_phone || sale.phone
-        );
-
-        if (customerPhone && salePhone === customerPhone) {
-          return true;
-        }
-
-        if (
-          customerName &&
-          normalize(sale.customer_name) === customerName
-        ) {
-          return true;
-        }
-
-        return false;
-      });
-
-      const orderRevenue = matchedOrders.reduce(
-        (sum, order) =>
-          sum + Number(order.total_amount || 0),
-        0
       );
-
-      const salesRevenue = matchedSales.reduce(
-        (sum, sale) =>
-          sum + Number(sale.total_amount || 0),
-        0
-      );
-
-      const revenue =
-        matchedOrders.length > 0
-          ? orderRevenue
-          : salesRevenue;
-
-      const totalOrders =
-        matchedOrders.length > 0
-          ? matchedOrders.length
-          : matchedSales.length;
-
-      const allAmounts = [
-        ...matchedOrders.map((item) =>
-          Number(item.total_amount || 0)
-        ),
-        ...matchedSales.map((item) =>
-          Number(item.total_amount || 0)
-        ),
-      ];
-
-      const highestPurchase =
-        allAmounts.length > 0
-          ? Math.max(...allAmounts)
-          : 0;
-
-      const allDates = [
-        ...matchedOrders
-          .map((item) => item.created_at)
-          .filter(Boolean) as string[],
-        ...matchedSales
-          .map((item) => item.created_at)
-          .filter(Boolean) as string[],
-      ].sort(
-        (a, b) =>
-          new Date(a).getTime() -
-          new Date(b).getTime()
-      );
-
-      const firstOrder =
-        allDates.length > 0 ? allDates[0] : null;
-
-      const lastOrder =
-        allDates.length > 0
-          ? allDates[allDates.length - 1]
-          : null;
-
-      return {
-        customer,
-        name: customer.full_name || "Unnamed Customer",
-        phone: customer.phone || "No phone",
-        customerCode:
-          customer.customer_code || "—",
-        orders: totalOrders,
-        revenue,
-        highestPurchase,
-        averageOrder:
-          totalOrders > 0
-            ? revenue / totalOrders
-            : 0,
-        firstOrder,
-        lastOrder,
-        recentOrders: matchedOrders.slice(0, 5),
-      };
-    });
-  }, [customers, orders, sales]);
+}, [
+  customers,
+  orders,
+  sales,
+  debtors,
+]);
 
   /* =========================================================
      SEARCH
   ========================================================== */
 
-  const filteredCustomers = useMemo(() => {
-    const query = normalize(search);
+  const filteredCustomers =
+    useMemo(() => {
+      const query =
+        normalize(search);
 
-    if (!query) {
-      return customerStats;
-    }
+      if (!query) {
+        return customerStats;
+      }
 
-    return customerStats.filter((item) => {
-      return (
-        normalize(item.name).includes(query) ||
-        normalize(item.phone).includes(query) ||
-        normalize(item.customerCode).includes(query) ||
-        normalize(item.customer.email).includes(query)
+      return customerStats.filter(
+        (item) =>
+          normalize(
+            item.name
+          ).includes(query) ||
+          normalize(
+            item.phone
+          ).includes(query) ||
+          normalize(
+            item.customerCode
+          ).includes(query) ||
+          normalize(
+            item.customer.email
+          ).includes(query)
       );
-    });
-  }, [customerStats, search]);
+    }, [
+      customerStats,
+      search,
+    ]);
 
   /* =========================================================
      KPIs
   ========================================================== */
 
-  const totalCustomers = customers.length;
+  const totalCustomers =
+    customers.length;
 
-  const activeCustomers = customers.filter(
-    (customer) =>
-      normalize(customer.status || "Active") ===
-      "active"
-  ).length;
+  const activeCustomers =
+    customers.filter(
+      (customer) =>
+        normalize(
+          customer.status ||
+            "Active"
+        ) === "active"
+    ).length;
 
-  const newCustomersThisMonth = customers.filter(
-    (customer) => {
-      if (!customer.created_at) return false;
+  const newCustomersThisMonth =
+    customers.filter(
+      (customer) => {
+        if (!customer.created_at) {
+          return false;
+        }
 
-      const created = new Date(customer.created_at);
-      const now = new Date();
+        const created =
+          new Date(
+            customer.created_at
+          );
 
-      return (
-        created.getFullYear() === now.getFullYear() &&
-        created.getMonth() === now.getMonth()
-      );
-    }
-  ).length;
+        const now =
+          new Date();
 
-  const totalCustomerOrders = customerStats.reduce(
-    (sum, customer) =>
-      sum + Number(customer.orders || 0),
-    0
-  );
+        return (
+          created.getFullYear() ===
+            now.getFullYear() &&
+          created.getMonth() ===
+            now.getMonth()
+        );
+      }
+    ).length;
 
-  const totalCustomerRevenue = customerStats.reduce(
-    (sum, customer) =>
-      sum + Number(customer.revenue || 0),
-    0
-  );
+  const totalCustomerOrders =
+    customerStats.reduce(
+      (sum, customer) =>
+        sum +
+        Number(
+          customer.orders || 0
+        ),
+      0
+    );
+
+  const totalCustomerRevenue =
+    customerStats.reduce(
+      (sum, customer) =>
+        sum +
+        Number(
+          customer.revenue || 0
+        ),
+      0
+    );
 
   const averageOrderValue =
     totalCustomerOrders > 0
-      ? totalCustomerRevenue / totalCustomerOrders
+      ? totalCustomerRevenue /
+        totalCustomerOrders
       : 0;
 
   /* =========================================================
      OPEN PROFILE
   ========================================================== */
 
-  const openProfile = async (stats: CustomerStats) => {
-    setActiveMenu(null);
-    setSelectedCustomer(stats);
+  const openProfile = async (
+    stats: CustomerStats
+  ) => {
+    setOpenActionMenu(null);
+
+    setMessageCustomer(null);
+    setEditingCustomer(null);
+
+    setProfileCustomer(stats);
+    setShowProfileModal(true);
+
     setCustomerMessages([]);
 
-    await loadCustomerMessages(stats.customer.id);
+    await loadCustomerMessages(
+      stats.customer.id
+    );
   };
 
   /* =========================================================
      OPEN EDIT
   ========================================================== */
 
-  const openEdit = (customer: Customer) => {
-    setActiveMenu(null);
-    setSelectedCustomer(null);
+  const openEdit = (
+    customer: Customer
+  ) => {
+    setOpenActionMenu(null);
+
+    setShowProfileModal(false);
+    setProfileCustomer(null);
 
     setEditingCustomer(customer);
 
     setEditForm({
-      full_name: customer.full_name || "",
-      phone: customer.phone || "",
-      email: customer.email || "",
-      address: customer.address || "",
+      full_name:
+        customer.full_name ||
+        "",
+      phone:
+        customer.phone ||
+        "",
+      email:
+        customer.email ||
+        "",
+      address:
+        customer.address ||
+        "",
       customer_type:
-        customer.customer_type || "Retail",
-      status: customer.status || "Active",
+        customer.customer_type ||
+        "Retail",
+      status:
+        customer.status ||
+        "Active",
     });
   };
 
@@ -714,105 +1168,328 @@ export default function CustomerPage() {
      OPEN MESSAGE
   ========================================================== */
 
-  const openMessage = (customer: Customer) => {
-    setActiveMenu(null);
-    setSelectedCustomer(null);
+  const openMessage = (
+    customer: Customer
+  ) => {
+    setOpenActionMenu(null);
+
+    setShowProfileModal(false);
+    setProfileCustomer(null);
+
     setMessageText("");
-    setMessageCustomer(customer);
+
+    setMessageCustomer(
+      customer
+    );
   };
 
   /* =========================================================
-     SAVE CUSTOMER
+     SAVE CUSTOMER EDITS
   ========================================================== */
 
   const saveCustomer = async () => {
-    if (!editingCustomer) return;
+    if (!editingCustomer) {
+      return;
+    }
 
-    if (!editForm.full_name.trim()) {
+    const fullName =
+      editForm.full_name.trim();
+
+    const phone =
+      editForm.phone.trim();
+
+    const email =
+      editForm.email.trim();
+
+    const address =
+      editForm.address.trim();
+
+    /* -------------------------------------------------------
+       VALIDATION
+    ------------------------------------------------------- */
+
+    if (!fullName) {
       showNotification(
         "error",
-        "Customer name is required."
+        "Customer full name is required."
       );
+
+      return;
+    }
+
+    if (
+      email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        email
+      )
+    ) {
+      showNotification(
+        "error",
+        "Please enter a valid email address."
+      );
+
       return;
     }
 
     setSavingCustomer(true);
 
-    const { error } = await supabase
-      .from("customers")
-      .update({
-        full_name: editForm.full_name.trim(),
-        phone: editForm.phone.trim(),
-        email: editForm.email.trim(),
-        address: editForm.address.trim(),
-        customer_type:
-          editForm.customer_type.trim(),
-        status: editForm.status.trim(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", editingCustomer.id);
+    try {
+      const updatedAt =
+        new Date().toISOString();
 
-    setSavingCustomer(false);
+      console.log(
+        "UPDATING CUSTOMER:",
+        {
+          id: editingCustomer.id,
+          full_name: fullName,
+          phone: phone || null,
+          email: email || null,
+          address: address || null,
+          customer_type:
+            editForm.customer_type ||
+            "Retail",
+          status:
+            editForm.status ||
+            "Active",
+        }
+      );
 
-    if (error) {
-      console.error("Customer update error:", error);
+      /* -----------------------------------------------------
+         UPDATE DATABASE
+      ----------------------------------------------------- */
+
+      const {
+        data: updatedRows,
+        error,
+      } = await supabase
+        .from("customers")
+        .update({
+          full_name: fullName,
+          phone: phone || null,
+          email: email || null,
+          address: address || null,
+          customer_type:
+            editForm.customer_type ||
+            "Retail",
+          status:
+            editForm.status ||
+            "Active",
+          updated_at: updatedAt,
+        })
+        .eq(
+          "id",
+          editingCustomer.id
+        )
+        .select(
+          "id, full_name, phone, email, address, customer_type, status, customer_code, photo_url, updated_at, created_at, is_verified, user_id"
+        )
+        .maybeSingle();
+
+      /* -----------------------------------------------------
+         DATABASE ERROR
+      ----------------------------------------------------- */
+
+      if (error) {
+        console.error(
+          "CUSTOMER UPDATE ERROR:",
+          error
+        );
+
+        showNotification(
+          "error",
+          `Failed to update customer: ${error.message}`
+        );
+
+        return;
+      }
+
+      /* -----------------------------------------------------
+         NO ROW RETURNED
+      ----------------------------------------------------- */
+
+      if (!updatedRows) {
+        console.error(
+          "CUSTOMER UPDATE RETURNED NO ROW:",
+          {
+            customerId:
+              editingCustomer.id,
+          }
+        );
+
+        showNotification(
+          "error",
+          "Customer was not updated. Supabase returned no updated customer record. Check your customers UPDATE/SELECT RLS policies."
+        );
+
+        return;
+      }
+
+      /* -----------------------------------------------------
+         SUCCESS
+      ----------------------------------------------------- */
+
+      console.log(
+        "CUSTOMER UPDATED SUCCESSFULLY:",
+        updatedRows
+      );
+
+      const updatedCustomer =
+        updatedRows as Customer;
+
+      /* -----------------------------------------------------
+         IMMEDIATELY UPDATE DIRECTORY
+      ----------------------------------------------------- */
+
+      setCustomers(
+        (currentCustomers) =>
+          currentCustomers.map(
+            (customer) =>
+              customer.id ===
+              updatedCustomer.id
+                ? {
+                    ...customer,
+                    ...updatedCustomer,
+                  }
+                : customer
+          )
+      );
+
+      /* -----------------------------------------------------
+         CLOSE EDIT MODAL
+      ----------------------------------------------------- */
+
+      setEditingCustomer(null);
+
+      /* -----------------------------------------------------
+         REFRESH FROM DATABASE
+      ----------------------------------------------------- */
+
+      await loadCustomers();
+
+      showNotification(
+        "success",
+        "Customer updated successfully."
+      );
+    } catch (error) {
+      console.error(
+        "UNEXPECTED CUSTOMER UPDATE ERROR:",
+        error
+      );
 
       showNotification(
         "error",
-        "Unable to update customer."
+        "Something went wrong while updating the customer."
       );
-
-      return;
+    } finally {
+      setSavingCustomer(false);
     }
-
-    showNotification(
-      "success",
-      "Customer updated successfully."
-    );
-
-    setEditingCustomer(null);
-    await loadCustomers();
   };
 
   /* =========================================================
      DELETE CUSTOMER
   ========================================================== */
 
-  const deleteCustomer = async () => {
-    if (!deletingCustomer) return;
+  const deleteCustomer =
+    async () => {
+      if (!deletingCustomer) {
+        return;
+      }
 
-    setDeleting(true);
+      setDeleting(true);
 
-    const customer = deletingCustomer;
+      try {
+        const customer =
+          deletingCustomer;
 
-    const { error } = await supabase
-      .from("customers")
-      .delete()
-      .eq("id", customer.id);
+        console.log(
+          "DELETING CUSTOMER:",
+          customer.id
+        );
 
-    setDeleting(false);
+        const {
+          data: deletedRows,
+          error,
+        } = await supabase
+          .from("customers")
+          .delete()
+          .eq(
+            "id",
+            customer.id
+          )
+          .select(
+            "id"
+          )
+          .maybeSingle();
 
-    if (error) {
-      console.error("Customer delete error:", error);
+        if (error) {
+          console.error(
+            "CUSTOMER DELETE ERROR:",
+            error
+          );
 
-      showNotification(
-        "error",
-        "Unable to delete customer."
-      );
+          showNotification(
+            "error",
+            `Unable to delete customer: ${error.message}`
+          );
 
-      return;
-    }
+          return;
+        }
 
-    setDeletingCustomer(null);
-    setSelectedCustomer(null);
+        if (!deletedRows) {
+          console.error(
+            "CUSTOMER DELETE RETURNED NO ROW:",
+            customer.id
+          );
 
-    showNotification(
-      "success",
-      "Customer deleted successfully."
-    );
+          showNotification(
+            "error",
+            "Customer was not deleted. Supabase returned no deleted record."
+          );
 
-    await loadCustomers();
-  };
+          return;
+        }
+
+        console.log(
+          "CUSTOMER DELETED SUCCESSFULLY:",
+          deletedRows
+        );
+
+        setCustomers(
+          (currentCustomers) =>
+            currentCustomers.filter(
+              (item) =>
+                item.id !==
+                customer.id
+            )
+        );
+
+        setDeletingCustomer(
+          null
+        );
+
+        setShowProfileModal(false);
+        setProfileCustomer(null);
+
+        showNotification(
+          "success",
+          "Customer deleted successfully."
+        );
+
+        await loadCustomers();
+      } catch (error) {
+        console.error(
+          "UNEXPECTED CUSTOMER DELETE ERROR:",
+          error
+        );
+
+        showNotification(
+          "error",
+          "Something went wrong while deleting the customer."
+        );
+      } finally {
+        setDeleting(false);
+      }
+    };
 
   /* =========================================================
      CUSTOMER PHOTO
@@ -821,73 +1498,268 @@ export default function CustomerPage() {
   const uploadCustomerPhoto = async (
     file: File
   ) => {
-    if (!editingCustomer) return;
+    if (!editingCustomer) {
+      return;
+    }
 
     setUploadingPhoto(true);
 
     try {
+      /* -----------------------------------------------------
+         VALIDATE FILE
+      ----------------------------------------------------- */
+
+      if (!file) {
+        throw new Error(
+          "No image file was selected."
+        );
+      }
+
+      if (!file.type.startsWith("image/")) {
+        throw new Error(
+          "Please select a valid image file."
+        );
+      }
+
+      const maxSize =
+        5 * 1024 * 1024;
+
+      if (file.size > maxSize) {
+        throw new Error(
+          "Image must be smaller than 5MB."
+        );
+      }
+
+      /* -----------------------------------------------------
+         CUSTOMER CODE
+      ----------------------------------------------------- */
+
       const customerCode =
         editingCustomer.customer_code ||
         generateCustomerCode();
 
+      /* -----------------------------------------------------
+         FILE EXTENSION
+      ----------------------------------------------------- */
+
       const extension =
-        file.name.split(".").pop() || "jpg";
+        file.name
+          .split(".")
+          .pop()
+          ?.toLowerCase() || "jpg";
+
+      /* -----------------------------------------------------
+         UNIQUE FILE PATH
+      ----------------------------------------------------- */
 
       const filePath =
         `${customerCode}/profile-${Date.now()}.${extension}`;
 
-      const { error: uploadError } =
+      console.log(
+        "UPLOADING CUSTOMER PHOTO:",
+        {
+          customerId:
+            editingCustomer.id,
+          filePath,
+        }
+      );
+
+      /* -----------------------------------------------------
+         UPLOAD TO STORAGE
+      ----------------------------------------------------- */
+
+      const {
+        error: uploadError,
+      } =
         await supabase.storage
           .from("customer-photos")
-          .upload(filePath, file, {
-            upsert: true,
-          });
+          .upload(
+            filePath,
+            file,
+            {
+              cacheControl: "3600",
+              upsert: true,
+              contentType: file.type,
+            }
+          );
 
       if (uploadError) {
-        throw uploadError;
+        console.error(
+          "CUSTOMER PHOTO STORAGE ERROR:",
+          uploadError
+        );
+
+        throw new Error(
+          uploadError.message ||
+            "Supabase Storage upload failed."
+        );
       }
+
+      /* -----------------------------------------------------
+         GET PUBLIC URL
+      ----------------------------------------------------- */
 
       const {
         data: publicUrlData,
-      } = supabase.storage
-        .from("customer-photos")
-        .getPublicUrl(filePath);
+      } =
+        supabase.storage
+          .from("customer-photos")
+          .getPublicUrl(
+            filePath
+          );
 
       const publicUrl =
-        publicUrlData.publicUrl;
+        publicUrlData?.publicUrl;
 
-      const { error: updateError } =
-        await supabase
-          .from("customers")
-          .update({
-            photo_url: publicUrl,
-          })
-          .eq("id", editingCustomer.id);
-
-      if (updateError) {
-        throw updateError;
+      if (!publicUrl) {
+        throw new Error(
+          "Supabase did not return a public image URL."
+        );
       }
 
-      setEditingCustomer({
-        ...editingCustomer,
-        photo_url: publicUrl,
-      });
+      console.log(
+        "CUSTOMER PHOTO PUBLIC URL:",
+        publicUrl
+      );
+
+      /* -----------------------------------------------------
+         SAVE PHOTO URL TO CUSTOMER
+      ----------------------------------------------------- */
+
+      const photoUpdatedAt =
+        new Date().toISOString();
+
+      const {
+        data: updatedPhotoCustomer,
+        error: customerUpdateError,
+      } = await supabase
+        .from("customers")
+        .update({
+          photo_url: publicUrl,
+          updated_at:
+            photoUpdatedAt,
+        })
+        .eq(
+          "id",
+          editingCustomer.id
+        )
+        .select(
+          "id, full_name, phone, email, address, customer_type, status, customer_code, photo_url, updated_at, created_at, is_verified, user_id"
+        )
+        .maybeSingle();
+
+      if (customerUpdateError) {
+        console.error(
+          "CUSTOMER PHOTO DATABASE ERROR:",
+          customerUpdateError
+        );
+
+        throw new Error(
+          customerUpdateError.message ||
+            "Could not save customer photo."
+        );
+      }
+
+      if (!updatedPhotoCustomer) {
+        console.error(
+          "CUSTOMER PHOTO UPDATE RETURNED NO ROW:",
+          editingCustomer.id
+        );
+
+        throw new Error(
+          "The photo uploaded successfully, but Supabase did not return the updated customer. Check your customers UPDATE/SELECT RLS policies."
+        );
+      }
+
+      console.log(
+        "CUSTOMER PHOTO SAVED SUCCESSFULLY:",
+        updatedPhotoCustomer
+      );
+
+      const updatedCustomer =
+        updatedPhotoCustomer as Customer;
+
+      /* -----------------------------------------------------
+         UPDATE EDIT MODAL IMMEDIATELY
+      ----------------------------------------------------- */
+
+      setEditingCustomer(
+        updatedCustomer
+      );
+
+      /* -----------------------------------------------------
+         UPDATE DIRECTORY IMMEDIATELY
+      ----------------------------------------------------- */
+
+      setCustomers(
+        (currentCustomers) =>
+          currentCustomers.map(
+            (customer) =>
+              customer.id ===
+              updatedCustomer.id
+                ? {
+                    ...customer,
+                    ...updatedCustomer,
+                  }
+                : customer
+          )
+      );
+
+      /* -----------------------------------------------------
+         UPDATE PROFILE IF IT EXISTS
+      ----------------------------------------------------- */
+
+      setProfileCustomer(
+        (currentProfile) => {
+          if (
+            !currentProfile ||
+            currentProfile.customer.id !==
+              updatedCustomer.id
+          ) {
+            return currentProfile;
+          }
+
+          return {
+            ...currentProfile,
+            customer:
+              updatedCustomer,
+            name:
+              updatedCustomer.full_name ||
+              "Unnamed Customer",
+            phone:
+              updatedCustomer.phone ||
+              "No phone",
+            customerCode:
+              updatedCustomer.customer_code ||
+              "—",
+          };
+        }
+      );
+
+      /* -----------------------------------------------------
+         REFRESH CUSTOMER DATA
+      ----------------------------------------------------- */
+
+      await loadCustomers();
 
       showNotification(
         "success",
-        "Customer photo updated."
+        "Customer photo updated successfully."
       );
-
-      await loadCustomers();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
-        "Customer photo upload error:",
+        "CUSTOMER PHOTO UPLOAD ERROR:",
         error
       );
 
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to upload customer photo.";
+
       showNotification(
         "error",
-        "Unable to upload customer photo."
+        message
       );
     } finally {
       setUploadingPhoto(false);
@@ -898,54 +1770,79 @@ export default function CustomerPage() {
      MESSAGING
   ========================================================== */
 
-  const handleMessageSend = async () => {
-    if (!messageText.trim()) {
+  const handleMessageSend =
+    async () => {
+      if (!messageText.trim()) {
+        showNotification(
+          "error",
+          "Enter a message first."
+        );
+
+        return;
+      }
+
+      setSendingMessage(true);
+
+      await new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            500
+          )
+      );
+
+      setSendingMessage(
+        false
+      );
+
+      setMessageText("");
+
       showNotification(
         "error",
-        "Enter a message first."
+        "Messaging Backend Required — message was not sent."
       );
-      return;
+
+      setMessageCustomer(
+        null
+      );
+
+      setShowAllCustomersMessage(
+        false
+      );
+    };
+
+/* =========================================================
+   CLOSE ACTION MENU WHEN CLICKING OUTSIDE
+========================================================== */
+
+useEffect(() => {
+  const handleClickOutside = (
+    event: MouseEvent
+  ) => {
+    const target =
+      event.target as HTMLElement;
+
+    if (
+      !target.closest(
+        "[data-customer-action-menu]"
+      )
+    ) {
+      setOpenActionMenu(null);
     }
-
-    setSendingMessage(true);
-
-    await new Promise((resolve) =>
-      setTimeout(resolve, 500)
-    );
-
-    setSendingMessage(false);
-    setMessageText("");
-
-    showNotification(
-      "error",
-      "Messaging Backend Required — message was not sent."
-    );
-
-    setMessageCustomer(null);
-    setShowAllCustomersMessage(false);
   };
 
-  /* =========================================================
-     CLOSE MENU WHEN CLICKING OUTSIDE
-  ========================================================== */
+  document.addEventListener(
+    "click",
+    handleClickOutside
+  );
 
-  useEffect(() => {
-    const handleClick = () => {
-      setActiveMenu(null);
-    };
-
-    document.addEventListener(
+  return () => {
+    document.removeEventListener(
       "click",
-      handleClick
+      handleClickOutside
     );
-
-    return () => {
-      document.removeEventListener(
-        "click",
-        handleClick
-      );
-    };
-  }, []);
+  };
+}, []);
 
   /* =========================================================
      LOADING
@@ -954,7 +1851,10 @@ export default function CustomerPage() {
   if (loading) {
     return (
       <ProtectedRoute
-        allowedRoles={["admin", "cashier"]}
+        allowedRoles={[
+          "admin",
+          "cashier",
+        ]}
       >
         <div className="min-h-screen bg-gradient-to-br from-[#081028] via-[#0B1739] to-[#142850] flex items-center justify-center">
           <div className="text-center">
@@ -979,34 +1879,39 @@ export default function CustomerPage() {
 
   return (
     <ProtectedRoute
-      allowedRoles={["admin", "cashier"]}
+      allowedRoles={[
+        "admin",
+        "cashier",
+      ]}
     >
-      <div
-        className="min-h-screen bg-gradient-to-br from-[#081028] via-[#0B1739] to-[#142850] p-10"
-        onClick={() => setActiveMenu(null)}
-      >
+      <div className="min-h-screen bg-gradient-to-br from-[#081028] via-[#0B1739] to-[#142850] p-10">
+
         {/* =====================================================
             NOTIFICATION
         ====================================================== */}
 
         {notification && (
-          <div className="fixed right-8 top-8 z-[100]">
+          <div className="fixed right-8 top-8 z-[300]">
             <div
               className={`rounded-2xl border px-6 py-4 shadow-2xl backdrop-blur-xl ${
-                notification.type === "success"
+                notification.type ===
+                "success"
                   ? "border-emerald-400/30 bg-emerald-950/90 text-emerald-100"
                   : "border-red-400/30 bg-red-950/90 text-red-100"
               }`}
             >
               <div className="flex items-center gap-3">
                 <span className="text-xl">
-                  {notification.type === "success"
+                  {notification.type ===
+                  "success"
                     ? "✓"
                     : "!"}
                 </span>
 
                 <span className="font-semibold">
-                  {notification.message}
+                  {
+                    notification.message
+                  }
                 </span>
               </div>
             </div>
@@ -1014,1038 +1919,1076 @@ export default function CustomerPage() {
         )}
 
         {/* =====================================================
-            HERO
+            EXECUTIVE HEADER
         ====================================================== */}
 
-        <div className="mb-8 flex gap-6">
-          <div className="flex-1 rounded-3xl border border-slate-700 bg-gradient-to-r from-[#0B1739] via-[#142850] to-[#1E3A8A] p-8 shadow-2xl">
-            <div className="flex items-center justify-between gap-8">
-              <div>
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-400/20 bg-blue-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-blue-300">
-                  👥 Customer Relationship Module
-                </div>
+        <header className="mb-10">
+          <div className="flex flex-col gap-8 xl:flex-row xl:items-center xl:justify-between">
 
-                <h1 className="text-5xl font-bold tracking-tight text-white">
+            {/* LEFT SIDE */}
+
+            <div className="flex items-center gap-6">
+
+              <img
+                src="/logo/nkiruka-logo.png"
+                alt="NKIRUKA"
+                width={90}
+                height={90}
+                className="h-[90px] w-[90px] object-contain"
+              />
+
+              <div>
+                <p className="text-lg font-semibold text-blue-400">
+                  👋 {getLagosGreeting()},
+                </p>
+
+                <h1 className="mt-2 text-5xl font-black text-white">
                   Customer Management
                 </h1>
 
-                <p className="mt-3 max-w-2xl text-lg font-medium text-slate-300">
-                  Manage customer relationships, purchase
-                  activity, order history and customer
-                  communication from one central directory.
+                <p className="mt-2 text-lg text-slate-400">
+                  Customer Relationship & Records
                 </p>
 
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <div className="rounded-2xl border border-slate-600 bg-[#081028]/60 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                      Current Time
-                    </p>
-
-                    <p className="mt-1 text-sm font-semibold text-white">
-                      {new Intl.DateTimeFormat("en-NG", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                        hour12: true,
-                        timeZone: "Africa/Lagos",
-                      }).format(currentTime)}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-600 bg-[#081028]/60 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                      Directory
-                    </p>
-
-                    <p className="mt-1 text-sm font-semibold text-white">
-                      {filteredCustomers.length} customers
-                    </p>
-                  </div>
-                </div>
+                <p className="mt-1 text-slate-500">
+                  Customer Analytics Center
+                </p>
               </div>
 
-              <div className="hidden shrink-0 md:block">
-                <div className="flex h-28 w-28 items-center justify-center rounded-3xl border border-blue-300/20 bg-blue-500/10 text-6xl shadow-2xl">
-                  👥
-                </div>
-              </div>
             </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              loadAll(true);
-            }}
-            disabled={refreshing}
-            className="w-24 rounded-3xl border border-slate-700 bg-[#111C44] text-white shadow-2xl transition hover:bg-[#162455] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <div className="flex h-full flex-col items-center justify-center gap-3">
-              <span
-                className={`text-3xl ${
-                  refreshing ? "animate-spin" : ""
-                }`}
+            {/* RIGHT SIDE */}
+
+            <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
+
+              {/* REFRESH */}
+
+              <button
+                type="button"
+                onClick={() =>
+                  loadAll(true)
+                }
+                disabled={refreshing}
+                className="flex items-center justify-center gap-3 rounded-2xl border border-slate-700 bg-slate-800 px-6 py-4 text-white shadow-xl transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                ↻
-              </span>
+                <span
+                  className={`text-xl ${
+                    refreshing
+                      ? "animate-spin"
+                      : ""
+                  }`}
+                >
+                  ↻
+                </span>
 
-              <span className="text-xs font-semibold uppercase tracking-widest text-slate-300">
-                Refresh
-              </span>
+                {refreshing
+                  ? "Refreshing..."
+                  : "Refresh"}
+              </button>
+
+              {/* DATE */}
+
+              <div className="rounded-3xl border border-slate-700 bg-slate-900 px-8 py-6 shadow-2xl">
+
+                <p className="text-slate-400">
+                  Today
+                </p>
+
+                <h2 className="mt-1 text-2xl font-bold text-white">
+                  {new Intl.DateTimeFormat(
+                    "en-NG",
+                    {
+                      weekday:
+                        "long",
+                      day: "2-digit",
+                      month:
+                        "short",
+                      year: "numeric",
+                      timeZone:
+                        "Africa/Lagos",
+                    }
+                  ).format(
+                    currentTime
+                  )}
+                </h2>
+
+                <p className="mt-2 font-semibold text-blue-400">
+                  {new Intl.DateTimeFormat(
+                    "en-NG",
+                    {
+                      hour: "2-digit",
+                      minute:
+                        "2-digit",
+                      second:
+                        "2-digit",
+                      hour12: true,
+                      timeZone:
+                        "Africa/Lagos",
+                    }
+                  ).format(
+                    currentTime
+                  )}
+                </p>
+
+                <p className="mt-1 font-semibold text-yellow-400">
+                  Customer Analytics Center
+                </p>
+
+              </div>
+
             </div>
-          </button>
-        </div>
+
+          </div>
+        </header>
 
         {/* =====================================================
             KPI CARDS
         ====================================================== */}
 
-        <div className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-          {/* BLUE */}
+        <div className="mb-10 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+
+          {/* TOTAL */}
 
           <div className="rounded-3xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-900 p-7 text-white shadow-xl">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold uppercase tracking-widest text-blue-100">
-                Total Customers
-              </p>
 
-              <span className="text-3xl">
-                👥
-              </span>
-            </div>
-
-            <p className="mt-4 text-5xl font-bold">
-              {totalCustomers}
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-100">
+              TOTAL CUSTOMERS
             </p>
+
+            <h2 className="mt-4 text-5xl font-black">
+              {totalCustomers}
+            </h2>
 
             <p className="mt-2 text-sm font-semibold text-blue-100">
               Registered customers
             </p>
+
           </div>
 
-          {/* GREEN */}
+          {/* ACTIVE */}
 
           <div className="rounded-3xl bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700 p-7 text-white shadow-xl">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold uppercase tracking-widest text-emerald-100">
-                Active Customers
-              </p>
 
-              <span className="text-3xl">
-                ✓
-              </span>
-            </div>
-
-            <p className="mt-4 text-5xl font-bold">
-              {activeCustomers}
+            <p className="text-xs font-semibold uppercase tracking-widest text-green-100">
+              ACTIVE CUSTOMERS
             </p>
 
-            <p className="mt-2 text-sm font-semibold text-emerald-100">
+            <h2 className="mt-4 text-5xl font-black">
+              {activeCustomers}
+            </h2>
+
+            <p className="mt-2 text-sm font-semibold text-green-100">
               Currently active
             </p>
+
           </div>
 
-          {/* RED */}
+          {/* NEW */}
 
           <div className="rounded-3xl bg-gradient-to-br from-red-500 via-rose-600 to-red-800 p-7 text-white shadow-xl">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold uppercase tracking-widest text-red-100">
-                New This Month
-              </p>
 
-              <span className="text-3xl">
-                ✨
-              </span>
-            </div>
-
-            <p className="mt-4 text-5xl font-bold">
-              {newCustomersThisMonth}
+            <p className="text-xs font-semibold uppercase tracking-widest text-red-100">
+              NEW THIS MONTH
             </p>
+
+            <h2 className="mt-4 text-5xl font-black">
+              {newCustomersThisMonth}
+            </h2>
 
             <p className="mt-2 text-sm font-semibold text-red-100">
               Recently registered
             </p>
+
           </div>
 
-          {/* ORANGE */}
+          {/* AVERAGE */}
 
           <div className="rounded-3xl bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 p-7 text-white shadow-xl">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold uppercase tracking-widest text-orange-50">
-                Average Order
-              </p>
 
-              <span className="text-3xl">
-                ₦
-              </span>
-            </div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-yellow-100">
+              AVERAGE ORDER
+            </p>
 
-            <p className="mt-4 text-4xl font-bold">
+            <h2 className="mt-4 text-4xl font-black">
               {formatCurrency(
                 averageOrderValue
               )}
-            </p>
+            </h2>
 
-            <p className="mt-3 text-sm font-semibold text-orange-50">
+            <p className="mt-2 text-sm font-semibold text-yellow-100">
               Across customer activity
             </p>
+
           </div>
+
         </div>
 
+{/* =====================================================
+    CUSTOMER DIRECTORY
+====================================================== */}
+
+<div
+  className="rounded-3xl border border-slate-700 bg-[#111C44] p-8 shadow-2xl"
+  onClick={(event) => event.stopPropagation()}
+>
+  {/* DIRECTORY HEADER */}
+
+  <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
+    <div>
+      <h2 className="text-3xl font-black text-white">
+        Customer Directory
+      </h2>
+
+      <p className="mt-1 text-slate-400">
+        Showing{" "}
+        {filteredCustomers.length}{" "}
+        customer records.
+      </p>
+    </div>
+
+    <div className="mt-5 flex flex-col gap-3 md:mt-0 md:flex-row">
+      <input
+        type="text"
+        placeholder="Search customer..."
+        value={search}
+        onChange={(event) =>
+          setSearch(event.target.value)
+        }
+        className="w-full rounded-2xl border border-slate-600 bg-[#0B1739] p-4 text-white outline-none placeholder:text-slate-400 focus:border-blue-500 md:w-80"
+      />
+
+      <button
+        type="button"
+        onClick={() =>
+          setShowAllCustomersMessage(true)
+        }
+        className="rounded-2xl border border-blue-400/30 bg-blue-700 px-6 py-4 font-bold text-white shadow-xl transition-all hover:-translate-y-0.5 hover:bg-blue-600 hover:shadow-blue-500/30 active:scale-95"
+      >
+        💬 Message Customers
+      </button>
+    </div>
+  </div>
+
+  {/* TABLE */}
+
+  <div className="overflow-x-auto rounded-2xl">
+    <table className="w-full min-w-[1150px]">
+      <thead>
+        <tr className="bg-gradient-to-r from-blue-950 via-slate-900 to-blue-900 text-white">
+          <th className="p-5 text-left">
+            Photo
+          </th>
+
+          <th className="p-5 text-left">
+            Full Name
+          </th>
+
+          <th className="p-5 text-left">
+            Customer ID
+          </th>
+
+          <th className="p-5 text-left">
+            Phone
+          </th>
+
+          <th className="p-5 text-center">
+            Orders
+          </th>
+
+          <th className="p-5 text-left">
+            Revenue
+          </th>
+
+          <th className="p-5 text-left">
+            Status
+          </th>
+
+ <th className="p-5 text-right whitespace-nowrap">
+  Balance Due
+</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {filteredCustomers.length === 0 ? (
+          <tr>
+            <td
+              colSpan={8}
+              className="p-12 text-center text-slate-400"
+            >
+              <div className="text-5xl">
+                👥
+              </div>
+
+              <p className="mt-4 text-lg font-semibold text-white">
+                No customers found.
+              </p>
+
+              <p className="mt-2 text-sm text-slate-500">
+                Try changing your search.
+              </p>
+            </td>
+          </tr>
+        ) : (
+          filteredCustomers.map((item) => {
+            const customer =
+              item.customer;
+
+            return (
+              <tr
+                key={customer.id}
+                onClick={() =>
+                  openProfile(item)
+                }
+                className="cursor-pointer border-b border-slate-700 transition hover:bg-slate-800"
+              >
+                {/* PHOTO */}
+
+                <td className="p-5">
+                  <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-slate-200">
+                    {customer.photo_url ? (
+                      <img
+                        src={
+                          customer.photo_url
+                        }
+                        alt={
+                          customer.full_name
+                        }
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-600 to-indigo-900 text-sm font-bold text-white">
+                        {getInitials(
+                          item.name
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </td>
+
+                {/* NAME */}
+
+                <td className="whitespace-nowrap p-5">
+                  <p className="font-semibold text-white">
+                    {item.name}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    {customer.email ||
+                      "No email"}
+                  </p>
+                </td>
+
+                {/* CUSTOMER ID */}
+
+                <td className="p-5">
+                  <span className="rounded-full bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-900">
+                    {item.customerCode}
+                  </span>
+                </td>
+
+                {/* PHONE */}
+
+                <td className="whitespace-nowrap p-5 text-slate-200">
+                  {item.phone}
+                </td>
+
+                {/* ORDERS */}
+
+                <td className="p-5 text-center">
+                  <span className="font-black text-white">
+                    {item.orders}
+                  </span>
+                </td>
+
+                {/* REVENUE */}
+
+                <td className="whitespace-nowrap p-5 font-bold text-green-400">
+                  {formatCurrency(
+                    item.revenue
+                  )}
+                </td>
+
+                {/* STATUS */}
+
+                <td className="p-5">
+                  <span
+                    className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold ${customerStatusClasses(
+                      customer.status
+                    )}`}
+                  >
+                    {customer.status ||
+                      "Active"}
+                  </span>
+                </td>
+
+{/* OUTSTANDING BALANCE */}
+
+<td className="whitespace-nowrap p-5 text-right">
+  <span
+    className={`font-bold ${
+      item.balanceDue > 0
+        ? "text-amber-400"
+        : "text-slate-400"
+    }`}
+  >
+    {formatCurrency(
+      item.balanceDue
+    )}
+  </span>
+</td>
+              </tr>
+            );
+          })
+        )}
+      </tbody>
+    </table>
+  </div>
+</div>
+
         {/* =====================================================
-            CUSTOMER DIRECTORY
+            CUSTOMER PROFILE MODAL
         ====================================================== */}
 
-        <section
-          className="rounded-3xl border border-slate-700 bg-[#111C44] p-8 shadow-2xl"
-          onClick={(event) =>
-            event.stopPropagation()
-          }
-        >
-          {/* DIRECTORY HEADER */}
+        {showProfileModal &&
+          profileCustomer && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/70 p-6 backdrop-blur-sm"
+              onClick={() => {
+                setShowProfileModal(false);
+                setProfileCustomer(null);
+              }}
+            >
 
-          <div className="mb-8 flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <h2 className="text-3xl font-bold text-white">
-                  Customer Directory
-                </h2>
-
-                <span className="rounded-full border border-slate-600 bg-[#0B1739] px-3 py-1 text-xs font-semibold text-slate-300">
-                  {filteredCustomers.length}
-                </span>
-              </div>
-
-              <p className="mt-2 text-sm font-medium text-slate-400">
-                Click any customer row to view their complete
-                customer profile.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <div className="relative">
-                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-500">
-                  🔎
-                </span>
-
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(event) =>
-                    setSearch(event.target.value)
-                  }
-                  placeholder="Search customer..."
-                  className="w-full min-w-[280px] rounded-2xl border border-slate-700 bg-[#0B1739] py-3 pl-11 pr-4 text-sm font-medium text-white outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowAllCustomersMessage(true)
+              <div
+                className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl"
+                onClick={(event) =>
+                  event.stopPropagation()
                 }
-                className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-500"
               >
-                💬 Message Customers
-              </button>
-            </div>
-          </div>
 
-          {/* TABLE */}
+                {/* PROFILE HEADER */}
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-700">
-            <table className="min-w-[1100px] w-full">
-              <thead>
-                <tr className="bg-gradient-to-r from-blue-950 via-slate-900 to-blue-900">
-                  <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-300">
-                    Customer
-                  </th>
+                <div className="relative bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-8 text-white">
 
-                  <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-300">
-                    Photo
-                  </th>
+                  <div className="flex flex-col gap-6 md:flex-row md:items-center">
 
-                  <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-300">
-                    Customer ID
-                  </th>
+                    {/* CUSTOMER PHOTO */}
 
-                  <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-300">
-                    Phone
-                  </th>
+                    <div className="h-44 w-44 flex-shrink-0 overflow-hidden rounded-3xl border-4 border-white/20 bg-white/20 shadow-2xl md:h-52 md:w-52">
 
-                  <th className="px-5 py-4 text-center text-xs font-semibold uppercase tracking-widest text-slate-300">
-                    Orders
-                  </th>
+                      {profileCustomer.customer.photo_url ? (
+                        <img
+                          src={
+                            profileCustomer.customer.photo_url
+                          }
+                          alt={
+                            profileCustomer.name
+                          }
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-600 to-indigo-900 text-6xl font-black">
+                          {getInitials(
+                            profileCustomer.name
+                          )}
+                        </div>
+                      )}
 
-                  <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-widest text-slate-300">
-                    Revenue
-                  </th>
+                    </div>
 
-                  <th className="px-5 py-4 text-center text-xs font-semibold uppercase tracking-widest text-slate-300">
-                    Status
-                  </th>
+                    {/* CUSTOMER INFORMATION */}
 
-                  <th className="px-5 py-4 text-center text-xs font-semibold uppercase tracking-widest text-slate-300">
-                    More
-                  </th>
-                </tr>
-              </thead>
+                    <div className="flex-1">
 
-              <tbody>
-                {filteredCustomers.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      className="px-6 py-16 text-center"
-                    >
-                      <div className="text-5xl">
-                        👥
+                      <div className="mb-3 flex flex-wrap gap-3">
+
+                        <span
+                          className={`rounded-full px-4 py-2 text-sm font-bold ${customerStatusClasses(
+                            profileCustomer.customer.status
+                          )}`}
+                        >
+                          {
+                            profileCustomer.customer.status ||
+                            "Active"
+                          }
+                        </span>
+
+                        <span className="rounded-full bg-white/20 px-4 py-2 text-sm font-semibold">
+                          {
+                            profileCustomer.customer
+                              .customer_type ||
+                            "Retail"
+                          }
+                        </span>
+
                       </div>
 
-                      <p className="mt-4 text-lg font-semibold text-white">
-                        No customers found
+                      <h2 className="text-4xl font-black">
+                        {profileCustomer.name}
+                      </h2>
+
+                      <p className="mt-1 text-xl font-semibold text-blue-200">
+                        Customer Profile
                       </p>
 
-                      <p className="mt-2 text-sm text-slate-500">
-                        Try changing your search.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredCustomers.map((item) => {
-                    const customer =
-                      item.customer;
+                      <div className="mt-6 grid grid-cols-2 gap-5 text-blue-100">
 
-                    return (
-                      <tr
-                        key={customer.id}
-                        onClick={() =>
-                          openProfile(item)
-                        }
-                        className="cursor-pointer border-t border-slate-700 transition hover:bg-slate-800/70"
-                      >
-                        {/* CUSTOMER */}
+                        <div>
+                          <p className="text-xs uppercase">
+                            Customer ID
+                          </p>
 
-                        <td className="px-5 py-4">
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold text-white">
-                              {item.name}
-                            </p>
+                          <p className="font-bold">
+                            {
+                              profileCustomer.customerCode
+                            }
+                          </p>
+                        </div>
 
-                            <p className="mt-1 truncate text-xs font-medium text-slate-500">
-                              {customer.email ||
-                                "No email"}
-                            </p>
-                          </div>
-                        </td>
+                        <div>
+                          <p className="text-xs uppercase">
+                            Phone
+                          </p>
 
-                        {/* PHOTO */}
+                          <p className="font-bold">
+                            {profileCustomer.phone}
+                          </p>
+                        </div>
 
-                        <td className="px-5 py-4">
-                          {customer.photo_url ? (
-                            <img
-                              src={
-                                customer.photo_url
-                              }
-                              alt={
-                                customer.full_name
-                              }
-                              className="h-11 w-11 rounded-2xl object-cover ring-2 ring-slate-700"
-                            />
-                          ) : (
-                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-800 text-xs font-semibold text-white ring-2 ring-slate-700">
-                              {getInitials(
-                                item.name
-                              )}
-                            </div>
-                          )}
-                        </td>
+                        <div>
+                          <p className="text-xs uppercase">
+                            Orders
+                          </p>
 
-                        {/* CUSTOMER ID */}
+                          <p className="font-bold">
+                            {profileCustomer.orders}
+                          </p>
+                        </div>
 
-                        <td className="px-5 py-4">
-                          <span className="rounded-xl border border-slate-700 bg-[#0B1739] px-3 py-2 text-xs font-semibold text-blue-300">
-                            {item.customerCode}
-                          </span>
-                        </td>
+                        <div>
+                          <p className="text-xs uppercase">
+                            Revenue
+                          </p>
 
-                        {/* PHONE */}
-
-                        <td className="px-5 py-4 text-sm font-medium text-slate-300">
-                          {item.phone}
-                        </td>
-
-                        {/* ORDERS */}
-
-                        <td className="px-5 py-4 text-center">
-                          <span className="text-lg font-semibold text-white">
-                            {item.orders}
-                          </span>
-                        </td>
-
-                        {/* REVENUE */}
-
-                        <td className="px-5 py-4 text-right">
-                          <span className="font-semibold text-emerald-400">
+                          <p className="font-bold">
                             {formatCurrency(
-                              item.revenue
+                              profileCustomer.revenue
                             )}
-                          </span>
-                        </td>
+                          </p>
+                        </div>
 
-                        {/* STATUS */}
+                      </div>
 
-                        <td className="px-5 py-4 text-center">
-                          <span
-                            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${statusClasses(
-                              customer.status
-                            )}`}
-                          >
-                            {customer.status ||
-                              "Active"}
-                          </span>
-                        </td>
-
-                        {/* ACTION */}
-
-                        <td className="relative px-5 py-4 text-center">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-
-                              setActiveMenu(
-                                activeMenu ===
-                                  customer.id
-                                  ? null
-                                  : customer.id
-                              );
-                            }}
-                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-[#0B1739] text-lg font-semibold leading-none text-slate-300 transition hover:border-blue-500 hover:text-white"
-                          >
-                            ⋮
-                          </button>
-
-                          {activeMenu ===
-                            customer.id && (
-                            <div
-                              onClick={(event) =>
-                                event.stopPropagation()
-                              }
-                              className="absolute right-3 top-12 z-30 max-h-56 w-44 overflow-y-auto rounded-2xl border border-slate-700 bg-[#081028] p-1.5 text-left shadow-2xl"
-                            >
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openProfile(
-                                    item
-                                  )
-                                }
-                                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
-                              >
-                                👁️
-                                <span>
-                                  View Profile
-                                </span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openEdit(
-                                    customer
-                                  )
-                                }
-                                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
-                              >
-                                ✏️
-                                <span>
-                                  Edit Customer
-                                </span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openMessage(
-                                    customer
-                                  )
-                                }
-                                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
-                              >
-                                💬
-                                <span>
-                                  Message
-                                </span>
-                              </button>
-
-                              <div className="my-1 border-t border-slate-700" />
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveMenu(
-                                    null
-                                  );
-                                  setDeletingCustomer(
-                                    customer
-                                  );
-                                }}
-                                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-red-400 transition hover:bg-red-950/40"
-                              >
-                                🗑️
-                                <span>
-                                  Delete
-                                </span>
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* =====================================================
-            CUSTOMER PROFILE / VIEW CUSTOMER
-        ====================================================== */}
-
-        {selectedCustomer && (
-          <div
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
-            onClick={() =>
-              setSelectedCustomer(null)
-            }
-          >
-            <div
-              className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
-              onClick={(event) =>
-                event.stopPropagation()
-              }
-            >
-              {/* PROFILE HEADER */}
-
-              <div className="relative overflow-hidden bg-gradient-to-r from-[#0B1739] via-[#142850] to-[#1E3A8A] p-8">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSelectedCustomer(null)
-                  }
-                  className="absolute right-6 top-6 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-white/10 text-xl font-semibold text-white transition hover:bg-white/20"
-                >
-                  ×
-                </button>
-
-                <div className="flex flex-col gap-6 md:flex-row md:items-center">
-                  {selectedCustomer.customer
-                    .photo_url ? (
-                    <img
-                      src={
-                        selectedCustomer.customer
-                          .photo_url
-                      }
-                      alt={
-                        selectedCustomer.name
-                      }
-                      className="h-32 w-32 rounded-3xl object-cover ring-4 ring-white/20 shadow-2xl"
-                    />
-                  ) : (
-                    <div className="flex h-32 w-32 shrink-0 items-center justify-center rounded-3xl bg-white/10 text-4xl font-bold text-white ring-4 ring-white/20">
-                      {getInitials(
-                        selectedCustomer.name
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex-1">
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClasses(
-                          selectedCustomer.customer
-                            .status
-                        )}`}
-                      >
-                        {selectedCustomer.customer
-                          .status ||
-                          "Active"}
-                      </span>
-
-                      <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-200">
-                        {selectedCustomer.customer
-                          .customer_type ||
-                          "Retail"}
-                      </span>
-
-                      <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold text-white">
-                        {selectedCustomer.customerCode}
-                      </span>
                     </div>
 
-                    <h2 className="text-4xl font-bold text-white">
-                      {selectedCustomer.name}
-                    </h2>
-
-                    <p className="mt-2 text-slate-300">
-                      Customer profile and purchase
-                      activity
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* PROFILE CONTENT */}
-
-              <div className="p-8">
-                {/* CUSTOMER KPI CARDS */}
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                      Orders
-                    </p>
-
-                    <p className="mt-2 text-3xl font-bold text-[#0B1739]">
-                      {selectedCustomer.orders}
-                    </p>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                      Revenue
-                    </p>
+                  {/* CLOSE BUTTON */}
 
-                    <p className="mt-2 text-2xl font-bold text-emerald-600">
-                      {formatCurrency(
-                        selectedCustomer.revenue
-                      )}
-                    </p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProfileModal(false);
+                      setProfileCustomer(null);
+                    }}
+                    className="absolute right-6 top-6 flex h-11 w-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-xl font-bold text-white transition hover:bg-white/20"
+                  >
+                    ✕
+                  </button>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                      Highest Purchase
-                    </p>
-
-                    <p className="mt-2 text-2xl font-bold text-[#0B1739]">
-                      {formatCurrency(
-                        selectedCustomer.highestPurchase
-                      )}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                      Average Order
-                    </p>
-
-                    <p className="mt-2 text-2xl font-bold text-blue-600">
-                      {formatCurrency(
-                        selectedCustomer.averageOrder
-                      )}
-                    </p>
-                  </div>
                 </div>
 
-                {/* CUSTOMER DETAILS */}
+                {/* PROFILE BODY */}
 
-                <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
-                  <div>
-                    <h3 className="mb-4 text-xl font-bold text-[#0B1739]">
-                      Customer Details
-                    </h3>
+                <div className="p-8">
 
-                    <div className="overflow-hidden rounded-2xl border border-slate-200">
-                      <div className="grid grid-cols-1 divide-y divide-slate-200 sm:grid-cols-2 sm:divide-y-0">
-                        <div className="border-b border-slate-200 p-4 sm:border-r">
+                  {/* CUSTOMER KPI */}
+
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        Orders
+                      </p>
+
+                      <p className="mt-2 text-3xl font-black text-slate-900">
+                        {profileCustomer.orders}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        Revenue
+                      </p>
+
+                      <p className="mt-2 text-2xl font-black text-green-600">
+                        {formatCurrency(
+                          profileCustomer.revenue
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        Highest Purchase
+                      </p>
+
+                      <p className="mt-2 text-2xl font-black text-slate-900">
+                        {formatCurrency(
+                          profileCustomer.highestPurchase
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        Average Order
+                      </p>
+
+                      <p className="mt-2 text-2xl font-black text-blue-700">
+                        {formatCurrency(
+                          profileCustomer.averageOrder
+                        )}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* DETAILS */}
+
+                  <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+
+                    {/* CUSTOMER INFORMATION */}
+
+                    <div>
+
+                      <h3 className="mb-5 text-2xl font-black text-slate-900">
+                        Customer Information
+                      </h3>
+
+                      <div className="space-y-4">
+
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                            Full Name
+                          </p>
+
+                          <p className="mt-1 font-bold text-slate-800">
+                            {profileCustomer.name}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
                             Phone
                           </p>
 
-                          <p className="mt-1 font-semibold text-slate-800">
-                            {selectedCustomer.phone}
+                          <p className="mt-1 font-bold text-slate-800">
+                            {
+                              profileCustomer.customer.phone ||
+                              "No phone number"
+                            }
                           </p>
                         </div>
 
-                        <div className="border-b border-slate-200 p-4">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
                             Email
                           </p>
 
-                          <p className="mt-1 break-all font-semibold text-slate-800">
-                            {selectedCustomer.customer
-                              .email ||
-                              "Not provided"}
+                          <p className="mt-1 break-all font-bold text-slate-800">
+                            {
+                              profileCustomer.customer.email ||
+                              "Not provided"
+                            }
                           </p>
                         </div>
 
-                        <div className="border-b border-slate-200 p-4 sm:border-r">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                            Customer Type
+                            Address
                           </p>
 
-                          <p className="mt-1 font-semibold text-slate-800">
-                            {selectedCustomer.customer
-                              .customer_type ||
-                              "Retail"}
+                          <p className="mt-1 font-bold text-slate-800">
+                            {
+                              profileCustomer.customer.address ||
+                              "No address provided"
+                            }
                           </p>
                         </div>
 
-                        <div className="border-b border-slate-200 p-4">
+                      </div>
+
+                    </div>
+
+                    {/* CUSTOMER ACTIVITY */}
+
+                    <div>
+
+                      <h3 className="mb-5 text-2xl font-black text-slate-900">
+                        Customer Activity
+                      </h3>
+
+                      <div className="space-y-4">
+
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                            Customer ID
+                          </p>
+
+                          <p className="mt-1 font-bold text-blue-700">
+                            {
+                              profileCustomer.customerCode
+                            }
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
                             Registered
                           </p>
 
-                          <p className="mt-1 font-semibold text-slate-800">
+                          <p className="mt-1 font-bold text-slate-800">
                             {formatDate(
-                              selectedCustomer.customer
-                                .created_at
+                              profileCustomer.customer.created_at
                             )}
                           </p>
                         </div>
 
-                        <div className="border-b border-slate-200 p-4">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                            Last Updated
+                            First Order
                           </p>
 
-                          <p className="mt-1 font-semibold text-slate-800">
+                          <p className="mt-1 font-bold text-slate-800">
                             {formatDateTime(
-                              selectedCustomer.customer
-                                .updated_at
+                              profileCustomer.firstOrder
                             )}
                           </p>
                         </div>
 
-                        <div className="border-b border-slate-200 p-4">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                            Last Order
+                          </p>
+
+                          <p className="mt-1 font-bold text-slate-800">
+                            {formatDateTime(
+                              profileCustomer.lastOrder
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
                             Verification
                           </p>
 
                           <p
-                            className={`mt-1 font-semibold ${
-                              selectedCustomer.customer
+                            className={`mt-1 font-bold ${
+                              profileCustomer.customer
                                 .is_verified
-                                ? "text-emerald-600"
-                                : "text-amber-600"
+                                ? "text-green-600"
+                                : "text-yellow-600"
                             }`}
                           >
-                            {selectedCustomer.customer
+                            {profileCustomer.customer
                               .is_verified
                               ? "Verified"
                               : "Not Verified"}
                           </p>
                         </div>
 
-                        <div className="border-b border-slate-200 p-4 sm:col-span-2">
-                          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                            Address
-                          </p>
-
-                          <p className="mt-1 font-semibold text-slate-800">
-                            {selectedCustomer.customer
-                              .address ||
-                              "No address provided"}
-                          </p>
-                        </div>
-
-                        <div className="p-4 sm:col-span-2">
-                          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                            Customer ID
-                          </p>
-
-                          <p className="mt-1 font-semibold text-blue-600">
-                            {selectedCustomer.customerCode}
-                          </p>
-                        </div>
                       </div>
+
                     </div>
+
                   </div>
 
-                  {/* CUSTOMER ACTIVITY */}
+                  {/* CUSTOMER MESSAGES */}
 
-                  <div>
-                    <h3 className="mb-4 text-xl font-bold text-[#0B1739]">
-                      Customer Activity
-                    </h3>
+                  <div className="mt-10">
 
-                    <div className="space-y-3">
-                      <div className="rounded-2xl border border-slate-200 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                          First Order
+                    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                      <div>
+
+                        <h3 className="text-2xl font-black text-slate-900">
+                          Customer Messages
+                        </h3>
+
+                        <p className="mt-1 text-sm text-slate-400">
+                          Messages from the future
+                          IRUKA BREAD customer portal
+                          will appear here.
                         </p>
 
-                        <p className="mt-1 font-semibold text-slate-800">
-                          {formatDateTime(
-                            selectedCustomer.firstOrder
-                          )}
-                        </p>
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                          Last Order
-                        </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          loadCustomerMessages(
+                            profileCustomer.customer.id
+                          )
+                        }
+                        className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:-translate-y-0.5 hover:bg-slate-100"
+                      >
+                        ↻ Refresh Messages
+                      </button>
 
-                        <p className="mt-1 font-semibold text-slate-800">
-                          {formatDateTime(
-                            selectedCustomer.lastOrder
-                          )}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-slate-200 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                          Customer ID
-                        </p>
-
-                        <p className="mt-1 font-semibold text-blue-600">
-                          {
-                            selectedCustomer.customerCode
-                          }
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl border border-slate-200 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                          Account Status
-                        </p>
-
-                        <p className="mt-1 font-semibold text-slate-800">
-                          {selectedCustomer.customer
-                            .status ||
-                            "Active"}
-                        </p>
-                      </div>
                     </div>
+
+                    <div className="overflow-hidden rounded-2xl border border-slate-200">
+
+                      {messagesLoading ? (
+                        <div className="p-10 text-center">
+
+                          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-blue-700" />
+
+                          <p className="mt-3 text-sm text-slate-500">
+                            Loading customer messages...
+                          </p>
+
+                        </div>
+                      ) : customerMessages.length ===
+                        0 ? (
+                        <div className="bg-slate-50 p-10 text-center">
+
+                          <div className="text-4xl">
+                            💬
+                          </div>
+
+                          <p className="mt-3 font-bold text-slate-700">
+                            No customer messages yet
+                          </p>
+
+                          <p className="mt-1 text-sm text-slate-500">
+                            When this customer sends a
+                            message through the customer
+                            portal, it will appear here.
+                          </p>
+
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-200">
+
+                          {customerMessages.map(
+                            (message) => {
+                              const messageBody =
+                                message.message ||
+                                message.content ||
+                                message.body ||
+                                "No message content";
+
+                              const sender =
+                                message.sender ||
+                                message.sender_type ||
+                                "Customer";
+
+                              return (
+                                <div
+                                  key={message.id}
+                                  className="p-5"
+                                >
+
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+
+                                    <div>
+
+                                      <div className="flex items-center gap-2">
+
+                                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                                          {sender}
+                                        </span>
+
+                                        {message.status && (
+                                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                            {
+                                              message.status
+                                            }
+                                          </span>
+                                        )}
+
+                                      </div>
+
+                                      <p className="mt-3 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-700">
+                                        {
+                                          messageBody
+                                        }
+                                      </p>
+
+                                    </div>
+
+                                    <p className="shrink-0 text-xs font-medium text-slate-400">
+                                      {formatDateTime(
+                                        message.created_at
+                                      )}
+                                    </p>
+
+                                  </div>
+
+                                </div>
+                              );
+                            }
+                          )}
+
+                        </div>
+                      )}
+
+                    </div>
+
                   </div>
-                </div>
 
-                {/* =================================================
-                    CUSTOMER MESSAGES
-                ================================================== */}
+                  {/* RECENT ORDERS */}
 
-                <div className="mt-8">
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h3 className="text-xl font-bold text-[#0B1739]">
-                        Customer Messages
+                  <div className="mt-10">
+
+                    <div className="mb-5 flex items-center justify-between">
+
+                      <h3 className="text-2xl font-black text-slate-900">
+                        Recent Orders
                       </h3>
 
-                      <p className="mt-1 text-sm font-medium text-slate-400">
-                        Messages sent by this customer from
-                        the future IRUKA BREAD customer portal
-                        will appear here.
-                      </p>
+                      <span className="text-sm font-semibold text-slate-400">
+                        Latest activity
+                      </span>
+
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        loadCustomerMessages(
-                          selectedCustomer.customer.id
-                        )
-                      }
-                      className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-                    >
-                      ↻ Refresh Messages
-                    </button>
-                  </div>
-
-                  <div className="overflow-hidden rounded-2xl border border-slate-200">
-                    {messagesLoading ? (
-                      <div className="p-8 text-center">
-                        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
-
-                        <p className="mt-3 text-sm font-medium text-slate-500">
-                          Loading customer messages...
-                        </p>
-                      </div>
-                    ) : customerMessages.length === 0 ? (
-                      <div className="bg-slate-50 p-8 text-center">
-                        <div className="text-4xl">
-                          💬
-                        </div>
-
-                        <p className="mt-3 font-semibold text-slate-700">
-                          No customer messages yet
-                        </p>
-
-                        <p className="mt-1 text-sm text-slate-500">
-                          When this customer sends a message
-                          through the customer portal, it will
-                          appear in this section.
+                    {profileCustomer.recentOrders.length ===
+                    0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+                        <p className="font-semibold text-slate-500">
+                          No order history found.
                         </p>
                       </div>
                     ) : (
-                      <div className="divide-y divide-slate-200">
-                        {customerMessages.map(
-                          (message) => {
-                            const messageBody =
-                              message.message ||
-                              message.content ||
-                              message.body ||
-                              "No message content";
+                      <div className="overflow-hidden rounded-2xl border border-slate-200">
 
-                            const sender =
-                              message.sender ||
-                              message.sender_type ||
-                              "Customer";
+                        {profileCustomer.recentOrders.map(
+                          (order) => (
+                            <div
+                              key={String(
+                                order.id
+                              )}
+                              className="flex flex-col gap-3 border-b border-slate-200 p-5 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                            >
 
-                            return (
-                              <div
-                                key={message.id}
-                                className="p-5"
-                              >
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                                        {sender}
-                                      </span>
+                              <div>
 
-                                      {message.status && (
-                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                                          {
-                                            message.status
-                                          }
-                                        </span>
-                                      )}
-                                    </div>
+                                <p className="font-bold text-slate-800">
+                                  Order #
+                                  {String(
+                                    order.id
+                                  ).slice(
+                                    0,
+                                    8
+                                  )}
+                                </p>
 
-                                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 font-medium text-slate-700">
-                                      {messageBody}
-                                    </p>
-                                  </div>
+                                <p className="mt-1 text-sm text-slate-500">
+                                  {formatDateTime(
+                                    order.created_at
+                                  )}
+                                </p>
 
-                                  <p className="shrink-0 text-xs font-medium text-slate-400">
-                                    {formatDateTime(
-                                      message.created_at
-                                    )}
-                                  </p>
-                                </div>
                               </div>
-                            );
-                          }
+
+                              <div className="flex items-center gap-4">
+
+                                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                  {order.status ||
+                                    "Pending"}
+                                </span>
+
+                                <span className="font-bold text-green-600">
+                                  {formatCurrency(
+                                    Number(
+                                      order.total_amount ||
+                                        0
+                                    )
+                                  )}
+                                </span>
+
+                              </div>
+
+                            </div>
+                          )
                         )}
+
                       </div>
                     )}
-                  </div>
-                </div>
 
-                {/* RECENT ORDERS */}
-
-                <div className="mt-8">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-xl font-bold text-[#0B1739]">
-                      Recent Orders
-                    </h3>
-
-                    <span className="text-sm font-semibold text-slate-400">
-                      Latest activity
-                    </span>
                   </div>
 
-                  {selectedCustomer
-                    .recentOrders.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-                      <p className="font-semibold text-slate-500">
-                        No order history found.
-                      </p>
+                  {/* PROFILE ACTIONS */}
+
+                  <div className="mt-10 flex flex-col justify-between gap-3 border-t border-slate-200 pt-7 sm:flex-row">
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProfileModal(false);
+                        setProfileCustomer(null);
+
+                        setDeletingCustomer(
+                          profileCustomer.customer
+                        );
+                      }}
+                      className="rounded-xl bg-red-600 px-6 py-3 font-bold text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-red-700 active:scale-95"
+                    >
+                      🗑 Delete Customer
+                    </button>
+
+                    <div className="flex flex-col gap-3 sm:flex-row">
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openMessage(
+                            profileCustomer.customer
+                          )
+                        }
+                        className="rounded-xl bg-blue-700 px-6 py-3 font-bold text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-blue-800 active:scale-95"
+                      >
+                        💬 Message Customer
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openEdit(
+                            profileCustomer.customer
+                          )
+                        }
+                        className="rounded-xl bg-slate-900 px-6 py-3 font-bold text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-slate-800 active:scale-95"
+                      >
+                        ✎ Edit Customer
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowProfileModal(false);
+                          setProfileCustomer(null);
+                        }}
+                        className="rounded-xl bg-slate-300 px-6 py-3 font-bold text-slate-900 transition-all hover:-translate-y-0.5 hover:bg-slate-400 active:scale-95"
+                      >
+                        Close
+                      </button>
+
                     </div>
-                  ) : (
-                    <div className="overflow-hidden rounded-2xl border border-slate-200">
-                      {selectedCustomer.recentOrders.map(
-                        (order) => (
-                          <div
-                            key={order.id}
-                            className="flex flex-col gap-3 border-b border-slate-200 p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
-                          >
-                            <div>
-                              <p className="font-semibold text-slate-800">
-                                Order #{order.id.slice(
-                                  0,
-                                  8
-                                )}
-                              </p>
 
-                              <p className="mt-1 text-sm font-medium text-slate-500">
-                                {formatDateTime(
-                                  order.created_at
-                                )}
-                              </p>
-                            </div>
+                  </div>
 
-                            <div className="flex items-center gap-4">
-                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                                {order.status ||
-                                  "Pending"}
-                              </span>
-
-                              <span className="font-semibold text-emerald-600">
-                                {formatCurrency(
-                                  Number(
-                                    order.total_amount ||
-                                      0
-                                  )
-                                )}
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  )}
                 </div>
 
-                {/* PROFILE ACTIONS */}
-
-                <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openMessage(
-                        selectedCustomer.customer
-                      )
-                    }
-                    className="rounded-2xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-500"
-                  >
-                    💬 Message Customer
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openEdit(
-                        selectedCustomer.customer
-                      )
-                    }
-                    className="rounded-2xl bg-[#0B1739] px-6 py-3 font-semibold text-white transition hover:bg-[#142850]"
-                  >
-                    ✏️ Edit Customer
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeletingCustomer(
-                        selectedCustomer.customer
-                      );
-                      setSelectedCustomer(null);
-                    }}
-                    className="rounded-2xl bg-red-600 px-6 py-3 font-semibold text-white transition hover:bg-red-500"
-                  >
-                    🗑️ Delete
-                  </button>
-                </div>
               </div>
+
             </div>
-          </div>
-        )}
+          )}
 
         {/* =====================================================
             EDIT CUSTOMER MODAL
@@ -2053,121 +2996,170 @@ export default function CustomerPage() {
 
         {editingCustomer && (
           <div
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
+            className="fixed inset-0 z-[150] flex items-center justify-center overflow-y-auto bg-black/70 p-6 backdrop-blur-md"
             onClick={() =>
-              setEditingCustomer(null)
+              setEditingCustomer(
+                null
+              )
             }
           >
+
             <div
-              className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[28px] bg-white shadow-2xl"
+              className="relative max-h-[calc(100vh-3rem)] w-full max-w-5xl overflow-y-auto rounded-[28px] bg-white shadow-[0_35px_90px_rgba(0,0,0,0.25)]"
               onClick={(event) =>
                 event.stopPropagation()
               }
             >
-              <div className="bg-gradient-to-r from-[#0B1739] via-[#142850] to-[#1E3A8A] p-7 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-blue-200">
-                      Customer Directory
-                    </p>
 
-                    <h2 className="mt-2 text-3xl font-bold">
+              {/* HEADER */}
+
+              <div className="flex items-center justify-between border-b border-slate-200 px-10 py-7">
+
+                <div className="flex items-center gap-5">
+
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-3xl">
+                    👤
+                  </div>
+
+                  <div>
+
+                    <h2 className="text-3xl font-bold text-slate-900">
                       Edit Customer
                     </h2>
 
-                    <p className="mt-1 text-slate-300">
+                    <p className="mt-1 text-slate-400">
                       Update customer information.
                     </p>
+
+                  </div>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditingCustomer(
+                      null
+                    )
+                  }
+                  className="h-11 w-11 rounded-xl border border-slate-200 text-xl transition-all hover:-translate-y-0.5 hover:bg-slate-100 active:scale-95"
+                >
+                  ✕
+                </button>
+
+              </div>
+
+              <div className="px-10 py-8">
+
+                {/* PHOTO */}
+
+                <div className="mb-10 flex flex-col items-center">
+
+                  <div className="h-40 w-40 overflow-hidden rounded-full border-[5px] border-slate-200 bg-slate-100 shadow-sm">
+
+                    {editingCustomer.photo_url ? (
+                      <img
+                        src={
+                          editingCustomer.photo_url
+                        }
+                        alt={
+                          editingCustomer.full_name
+                        }
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-600 to-indigo-900 text-4xl font-black text-white">
+                        {getInitials(
+                          editingCustomer.full_name
+                        )}
+                      </div>
+                    )}
+
                   </div>
 
                   <button
                     type="button"
-                    onClick={() =>
-                      setEditingCustomer(null)
+                    disabled={
+                      uploadingPhoto
                     }
-                    className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-xl font-semibold transition hover:bg-white/20"
+                    onClick={() =>
+                      fileInputRef.current?.click()
+                    }
+                    className="mt-5 inline-block rounded-xl bg-blue-700 px-6 py-3 font-semibold text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-blue-800 hover:shadow-blue-500/20 active:scale-95 disabled:opacity-50"
                   >
-                    ×
+                    {uploadingPhoto
+                      ? "Uploading..."
+                      : "Choose Photo"}
                   </button>
-                </div>
-              </div>
 
-              <div className="p-8">
-                {/* PHOTO */}
+                  <p className="mt-2 text-xs text-slate-400">
+                    JPG, PNG, WEBP or other image
+                    files up to 5MB.
+                  </p>
 
-                <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row">
-                  {editingCustomer.photo_url ? (
-                    <img
-                      src={
-                        editingCustomer.photo_url
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={(event) => {
+                      const file =
+                        event.target.files?.[0];
+
+                      if (file) {
+                        uploadCustomerPhoto(
+                          file
+                        );
                       }
-                      alt={
-                        editingCustomer.full_name
-                      }
-                      className="h-28 w-28 rounded-3xl object-cover ring-4 ring-slate-100"
-                    />
-                  ) : (
-                    <div className="flex h-28 w-28 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-800 text-3xl font-bold text-white">
-                      {getInitials(
-                        editingCustomer.full_name
-                      )}
-                    </div>
-                  )}
 
-                  <div>
-                    <p className="font-semibold text-slate-800">
-                      Customer Photo
-                    </p>
+                      event.target.value =
+                        "";
+                    }}
+                  />
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      Upload a profile photo for this
-                      customer.
-                    </p>
-
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(event) => {
-                        const file =
-                          event.target.files?.[0];
-
-                        if (file) {
-                          uploadCustomerPhoto(
-                            file
-                          );
-                        }
-
-                        event.target.value = "";
-                      }}
-                    />
-
-                    <button
-                      type="button"
-                      disabled={uploadingPhoto}
-                      onClick={() =>
-                        fileInputRef.current?.click()
-                      }
-                      className="mt-3 rounded-xl bg-[#0B1739] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#142850] disabled:opacity-50"
-                    >
-                      {uploadingPhoto
-                        ? "Uploading..."
-                        : "Upload Photo"}
-                    </button>
-                  </div>
                 </div>
 
                 {/* FORM */}
 
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-x-10 gap-y-8 md:grid-cols-2">
+
+                  {/* CUSTOMER ID */}
+
                   <div>
+
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Customer ID
+                    </label>
+
+                    <input
+                      type="text"
+                      value={
+                        editingCustomer.customer_code ||
+                        ""
+                      }
+                      readOnly
+                      className="w-full cursor-not-allowed rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 font-bold text-blue-900"
+                    />
+
+                    <p className="mt-2 text-xs text-slate-400">
+                      Customer ID is permanent.
+                    </p>
+
+                  </div>
+
+                  {/* FULL NAME */}
+
+                  <div>
+
                     <label className="mb-2 block text-sm font-semibold text-slate-700">
                       Full Name
                     </label>
 
                     <input
-                      value={editForm.full_name}
+                      type="text"
+                      value={
+                        editForm.full_name
+                      }
                       onChange={(event) =>
                         setEditForm({
                           ...editForm,
@@ -2175,17 +3167,24 @@ export default function CustomerPage() {
                             event.target.value,
                         })
                       }
-                      className="w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-600"
                     />
+
                   </div>
 
+                  {/* PHONE */}
+
                   <div>
+
                     <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Phone
+                      Phone Number
                     </label>
 
                     <input
-                      value={editForm.phone}
+                      type="text"
+                      value={
+                        editForm.phone
+                      }
                       onChange={(event) =>
                         setEditForm({
                           ...editForm,
@@ -2193,18 +3192,24 @@ export default function CustomerPage() {
                             event.target.value,
                         })
                       }
-                      className="w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-600"
                     />
+
                   </div>
 
+                  {/* EMAIL */}
+
                   <div>
+
                     <label className="mb-2 block text-sm font-semibold text-slate-700">
                       Email
                     </label>
 
                     <input
                       type="email"
-                      value={editForm.email}
+                      value={
+                        editForm.email
+                      }
                       onChange={(event) =>
                         setEditForm({
                           ...editForm,
@@ -2212,11 +3217,15 @@ export default function CustomerPage() {
                             event.target.value,
                         })
                       }
-                      className="w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-600"
                     />
+
                   </div>
 
+                  {/* CUSTOMER TYPE */}
+
                   <div>
+
                     <label className="mb-2 block text-sm font-semibold text-slate-700">
                       Customer Type
                     </label>
@@ -2232,7 +3241,7 @@ export default function CustomerPage() {
                             event.target.value,
                         })
                       }
-                      className="w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-blue-600"
                     >
                       <option value="Retail">
                         Retail
@@ -2242,15 +3251,21 @@ export default function CustomerPage() {
                         Wholesale
                       </option>
                     </select>
+
                   </div>
 
+                  {/* STATUS */}
+
                   <div>
+
                     <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Status
+                      Customer Status
                     </label>
 
                     <select
-                      value={editForm.status}
+                      value={
+                        editForm.status
+                      }
                       onChange={(event) =>
                         setEditForm({
                           ...editForm,
@@ -2258,30 +3273,36 @@ export default function CustomerPage() {
                             event.target.value,
                         })
                       }
-                      className="w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-blue-600"
                     >
                       <option value="Active">
-                        Active
+                        🟢 Active
                       </option>
 
                       <option value="Pending">
-                        Pending
+                        🟡 Pending
                       </option>
 
                       <option value="Inactive">
-                        Inactive
+                        🔴 Inactive
                       </option>
                     </select>
+
                   </div>
 
+                  {/* ADDRESS */}
+
                   <div className="md:col-span-2">
+
                     <label className="mb-2 block text-sm font-semibold text-slate-700">
                       Address
                     </label>
 
                     <textarea
                       rows={4}
-                      value={editForm.address}
+                      value={
+                        editForm.address
+                      }
                       onChange={(event) =>
                         setEditForm({
                           ...editForm,
@@ -2289,35 +3310,55 @@ export default function CustomerPage() {
                             event.target.value,
                         })
                       }
-                      className="w-full resize-none rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                      className="w-full resize-none rounded-xl border border-slate-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-600"
                     />
+
                   </div>
+
                 </div>
 
-                <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                {/* FOOTER */}
+
+                <div className="mt-12 flex items-center justify-end gap-4 border-t border-slate-200 pt-8">
+
                   <button
                     type="button"
-                    onClick={() =>
-                      setEditingCustomer(null)
+                    disabled={
+                      savingCustomer ||
+                      uploadingPhoto
                     }
-                    className="rounded-2xl border-2 border-slate-200 px-6 py-3 font-semibold text-slate-600 transition hover:bg-slate-50"
+                    onClick={() =>
+                      setEditingCustomer(
+                        null
+                      )
+                    }
+                    className="rounded-xl border border-slate-300 bg-white px-8 py-3 font-semibold transition-all hover:-translate-y-0.5 hover:bg-slate-100 active:scale-95 disabled:opacity-50"
                   >
                     Cancel
                   </button>
 
                   <button
                     type="button"
-                    disabled={savingCustomer}
-                    onClick={saveCustomer}
-                    className="rounded-2xl bg-blue-600 px-7 py-3 font-semibold text-white shadow-lg transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={
+                      savingCustomer ||
+                      uploadingPhoto
+                    }
+                    onClick={
+                      saveCustomer
+                    }
+                    className="rounded-xl bg-blue-700 px-10 py-3 font-semibold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-blue-800 hover:shadow-blue-500/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {savingCustomer
                       ? "Saving..."
-                      : "Save Changes"}
+                      : "💾 Save Changes"}
                   </button>
+
                 </div>
+
               </div>
+
             </div>
+
           </div>
         )}
 
@@ -2327,57 +3368,63 @@ export default function CustomerPage() {
 
         {messageCustomer && (
           <div
-            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
+            className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-6 backdrop-blur-md"
             onClick={() =>
-              setMessageCustomer(null)
+              setMessageCustomer(
+                null
+              )
             }
           >
+
             <div
               className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl"
               onClick={(event) =>
                 event.stopPropagation()
               }
             >
-              <div className="bg-gradient-to-r from-[#0B1739] via-[#142850] to-[#1E3A8A] p-7 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-blue-200">
-                      Customer Communication
-                    </p>
 
-                    <h2 className="mt-2 text-3xl font-bold">
+              <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-7 text-white">
+
+                <div className="flex items-center justify-between">
+
+                  <div>
+
+                    <h2 className="text-3xl font-black">
                       Message Customer
                     </h2>
 
-                    <p className="mt-1 text-slate-300">
-                      {messageCustomer.full_name}
+                    <p className="mt-1 text-blue-100">
+                      {
+                        messageCustomer.full_name
+                      }
                     </p>
+
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setMessageCustomer(null)
-                    }
-                    className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-xl font-semibold hover:bg-white/20"
-                  >
-                    ×
-                  </button>
+                  <div className="rounded-2xl bg-white/10 px-4 py-3 text-2xl">
+                    💬
+                  </div>
+
                 </div>
+
               </div>
 
               <div className="p-8">
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                  <p className="text-sm font-semibold text-amber-800">
-                    Customer messaging will be connected
-                    when the customer portal messaging
-                    backend is built. This form does not
-                    currently claim to deliver or save a
-                    message.
+
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+
+                  <p className="text-sm font-semibold leading-6 text-amber-800">
+                    Customer messaging will be
+                    connected when the customer
+                    portal messaging backend is
+                    built. This form does not
+                    currently claim to deliver or
+                    save a message.
                   </p>
+
                 </div>
 
-                <label className="mt-6 mb-2 block text-sm font-semibold text-slate-700">
+                <label className="mb-2 mt-6 block text-sm font-bold text-slate-700">
                   Message
                 </label>
 
@@ -2390,35 +3437,44 @@ export default function CustomerPage() {
                     )
                   }
                   placeholder="Write your message..."
-                  className="w-full resize-none rounded-2xl border-2 border-slate-200 px-4 py-4 font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                  className="w-full resize-none rounded-2xl border-2 border-slate-200 px-4 py-4 font-medium text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10"
                 />
 
-                <div className="mt-6 flex justify-end gap-3">
+                <div className="mt-6 flex justify-end gap-4">
+
                   <button
                     type="button"
                     onClick={() =>
-                      setMessageCustomer(null)
+                      setMessageCustomer(
+                        null
+                      )
                     }
-                    className="rounded-2xl border-2 border-slate-200 px-6 py-3 font-semibold text-slate-600"
+                    className="rounded-xl border border-slate-300 bg-white px-7 py-3 font-semibold text-slate-700 transition-all hover:-translate-y-0.5 hover:bg-slate-100 active:scale-95"
                   >
                     Cancel
                   </button>
 
                   <button
                     type="button"
-                    disabled={sendingMessage}
+                    disabled={
+                      sendingMessage
+                    }
                     onClick={
                       handleMessageSend
                     }
-                    className="rounded-2xl bg-blue-600 px-7 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:opacity-50"
+                    className="rounded-xl bg-blue-700 px-8 py-3 font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-blue-800 active:scale-95 disabled:opacity-60"
                   >
                     {sendingMessage
                       ? "Processing..."
                       : "Send Message"}
                   </button>
+
                 </div>
+
               </div>
+
             </div>
+
           </div>
         )}
 
@@ -2428,75 +3484,84 @@ export default function CustomerPage() {
 
         {showAllCustomersMessage && (
           <div
-            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
+            className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 p-6 backdrop-blur-md"
             onClick={() =>
-              setShowAllCustomersMessage(false)
+              setShowAllCustomersMessage(
+                false
+              )
             }
           >
+
             <div
               className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl"
               onClick={(event) =>
                 event.stopPropagation()
               }
             >
-              <div className="bg-gradient-to-r from-[#0B1739] via-[#142850] to-[#1E3A8A] p-7 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-blue-200">
-                      Customer Communication
-                    </p>
 
-                    <h2 className="mt-2 text-3xl font-bold">
+              <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-7 text-white">
+
+                <div className="flex items-center justify-between">
+
+                  <div>
+
+                    <h2 className="text-3xl font-black">
                       Message All Customers
                     </h2>
 
-                    <p className="mt-1 text-slate-300">
+                    <p className="mt-1 text-blue-100">
                       Broadcast communication
                     </p>
+
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowAllCustomersMessage(
-                        false
-                      )
-                    }
-                    className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-xl font-semibold hover:bg-white/20"
-                  >
-                    ×
-                  </button>
+                  <div className="rounded-2xl bg-white/10 px-4 py-3 text-2xl">
+                    👥
+                  </div>
+
                 </div>
+
               </div>
 
               <div className="p-8">
-                <div className="mb-5 flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 p-4">
+
+                <div className="mb-5 flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 p-5">
+
                   <div>
+
                     <p className="text-xs font-semibold uppercase tracking-widest text-blue-500">
                       Recipients
                     </p>
 
-                    <p className="mt-1 text-xl font-bold text-[#0B1739]">
-                      {customers.length} customers
+                    <p className="mt-1 text-2xl font-black text-slate-900">
+                      {
+                        customers.length
+                      }{" "}
+                      Customers
                     </p>
+
                   </div>
 
                   <span className="text-3xl">
                     👥
                   </span>
+
                 </div>
 
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                  <p className="text-sm font-semibold text-amber-800">
-                    Customer messaging will be connected
-                    when the customer portal messaging
-                    backend is built. This form does not
-                    currently claim to deliver or save a
-                    broadcast.
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+
+                  <p className="text-sm font-semibold leading-6 text-amber-800">
+                    Customer messaging will be
+                    connected when the customer
+                    portal messaging backend is
+                    built. This form does not
+                    currently claim to deliver or
+                    save a broadcast.
                   </p>
+
                 </div>
 
-                <label className="mt-6 mb-2 block text-sm font-semibold text-slate-700">
+                <label className="mb-2 mt-6 block text-sm font-bold text-slate-700">
                   Broadcast Message
                 </label>
 
@@ -2509,121 +3574,163 @@ export default function CustomerPage() {
                     )
                   }
                   placeholder="Write a message for all customers..."
-                  className="w-full resize-none rounded-2xl border-2 border-slate-200 px-4 py-4 font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                  className="w-full resize-none rounded-2xl border-2 border-slate-200 px-4 py-4 font-medium text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10"
                 />
 
-                <div className="mt-6 flex justify-end gap-3">
+                <div className="mt-6 flex justify-end gap-4">
+
                   <button
                     type="button"
                     onClick={() => {
-                      setMessageText("");
+                      setMessageText(
+                        ""
+                      );
+
                       setShowAllCustomersMessage(
                         false
                       );
                     }}
-                    className="rounded-2xl border-2 border-slate-200 px-6 py-3 font-semibold text-slate-600"
+                    className="rounded-xl border border-slate-300 bg-white px-7 py-3 font-semibold text-slate-700 transition-all hover:-translate-y-0.5 hover:bg-slate-100 active:scale-95"
                   >
                     Cancel
                   </button>
 
                   <button
                     type="button"
-                    disabled={sendingMessage}
+                    disabled={
+                      sendingMessage
+                    }
                     onClick={
                       handleMessageSend
                     }
-                    className="rounded-2xl bg-blue-600 px-7 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:opacity-50"
+                    className="rounded-xl bg-blue-700 px-8 py-3 font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-blue-800 active:scale-95 disabled:opacity-60"
                   >
                     {sendingMessage
                       ? "Processing..."
                       : "Send Broadcast"}
                   </button>
+
                 </div>
+
               </div>
+
             </div>
+
           </div>
         )}
 
         {/* =====================================================
-            DELETE CONFIRMATION
+            DELETE CUSTOMER MODAL
         ====================================================== */}
 
         {deletingCustomer && (
-          <div
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
-            onClick={() =>
-              setDeletingCustomer(null)
-            }
-          >
-            <div
-              className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl"
-              onClick={(event) =>
-                event.stopPropagation()
-              }
-            >
-              <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-800 p-7 text-white">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-3xl">
-                  ⚠️
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
+
+            <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
+
+              <div className="bg-gradient-to-r from-red-700 to-rose-900 px-8 py-7">
+
+                <div className="flex items-center gap-4">
+
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 text-3xl">
+                    🗑️
+                  </div>
+
+                  <div>
+
+                    <h2 className="text-2xl font-black text-white">
+                      Delete Customer
+                    </h2>
+
+                    <p className="mt-1 text-red-100">
+                      This action cannot be undone.
+                    </p>
+
+                  </div>
+
                 </div>
 
-                <h2 className="mt-5 text-3xl font-bold">
-                  Delete Customer?
-                </h2>
-
-                <p className="mt-2 text-red-100">
-                  This action cannot be undone.
-                </p>
               </div>
 
-              <div className="p-7">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                    Customer
+              <div className="p-8">
+
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+
+                  <p className="text-sm font-semibold text-red-700">
+                    You are about to permanently
+                    delete:
                   </p>
 
-                  <p className="mt-1 text-xl font-bold text-[#0B1739]">
-                    {deletingCustomer.full_name}
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium text-slate-500">
-                    {deletingCustomer.phone ||
-                      "No phone number"}
-                  </p>
-                </div>
-
-                <p className="mt-5 text-sm leading-6 text-slate-600">
-                  Deleting this customer will remove the
-                  customer record from the Customer
-                  directory.
-                </p>
-
-                <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                  <button
-                    type="button"
-                    disabled={deleting}
-                    onClick={() =>
-                      setDeletingCustomer(null)
+                  <p className="mt-2 text-2xl font-black text-slate-900">
+                    {
+                      deletingCustomer.full_name
                     }
-                    className="rounded-2xl border-2 border-slate-200 px-6 py-3 font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
+                  </p>
 
-                  <button
-                    type="button"
-                    disabled={deleting}
-                    onClick={deleteCustomer}
-                    className="rounded-2xl bg-red-600 px-6 py-3 font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {deleting
-                      ? "Deleting..."
-                      : "Delete Customer"}
-                  </button>
+                  <p className="mt-1 text-slate-600">
+                    Customer ID:{" "}
+                    <span className="font-bold">
+                      {
+                        deletingCustomer.customer_code ||
+                        "—"
+                      }
+                    </span>
+                  </p>
+
+                  <p className="mt-1 text-slate-600">
+                    Phone:{" "}
+                    <span className="font-bold">
+                      {
+                        deletingCustomer.phone ||
+                        "No phone number"
+                      }
+                    </span>
+                  </p>
+
                 </div>
+
+                <p className="mt-6 text-sm leading-6 text-slate-600">
+                  Deleting this customer will
+                  remove the customer record from
+                  the Customer Directory.
+                </p>
+
               </div>
+
+              <div className="flex justify-end gap-4 border-t border-slate-200 bg-slate-50 px-8 py-6">
+
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() =>
+                    setDeletingCustomer(
+                      null
+                    )
+                  }
+                  className="rounded-2xl border border-slate-300 bg-white px-7 py-3 font-semibold text-slate-700 transition-all hover:-translate-y-0.5 hover:bg-slate-100 active:scale-95 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={
+                    deleteCustomer
+                  }
+                  className="rounded-2xl bg-gradient-to-r from-red-600 to-rose-700 px-7 py-3 font-bold text-white shadow-lg shadow-red-500/20 transition-all hover:-translate-y-0.5 hover:from-red-700 hover:to-rose-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {deleting
+                    ? "Deleting..."
+                    : "Yes, Delete Customer"}
+                </button>
+
+              </div>
+
             </div>
           </div>
         )}
+
       </div>
     </ProtectedRoute>
   );

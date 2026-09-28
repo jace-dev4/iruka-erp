@@ -2360,12 +2360,12 @@ useEffect(() => {
               }}
             >
 
-              <div
-                className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl"
-                onClick={(event) =>
-                  event.stopPropagation()
-                }
-              >
+<div
+  className="relative flex max-h-[calc(100vh-3rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+  onClick={(event) =>
+    event.stopPropagation()
+  }
+>
 
                 {/* PROFILE HEADER */}
 
@@ -2499,9 +2499,9 @@ useEffect(() => {
 
                 </div>
 
-                {/* PROFILE BODY */}
+{/* PROFILE BODY */}
 
-                <div className="p-8">
+<div className="min-h-0 flex-1 overflow-y-auto p-8">
 
                   {/* CUSTOMER KPI */}
 
@@ -3005,7 +3005,7 @@ useEffect(() => {
           >
 
             <div
-              className="relative max-h-[calc(100vh-3rem)] w-full max-w-5xl overflow-y-auto rounded-[28px] bg-white shadow-[0_35px_90px_rgba(0,0,0,0.25)]"
+              className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_35px_90px_rgba(0,0,0,0.25)]"
               onClick={(event) =>
                 event.stopPropagation()
               }
@@ -3049,7 +3049,7 @@ useEffect(() => {
 
               </div>
 
-              <div className="px-10 py-8">
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-8 sm:px-10">
 
                 {/* PHOTO */}
 

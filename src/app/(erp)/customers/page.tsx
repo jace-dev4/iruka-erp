@@ -1770,47 +1770,152 @@ return {
      MESSAGING
   ========================================================== */
 
-  const handleMessageSend =
-    async () => {
-      if (!messageText.trim()) {
+const handleMessageSend = async () => {
+  const trimmedMessage = messageText.trim();
+
+  if (!trimmedMessage) {
+    showNotification(
+      "error",
+      "Enter a message first."
+    );
+
+    return;
+  }
+
+  setSendingMessage(true);
+
+  try {
+    /*
+     * =====================================================
+     * INDIVIDUAL CUSTOMER MESSAGE
+     * =====================================================
+     */
+
+    if (messageCustomer) {
+      const { error } = await supabase
+        .from("customer_messages")
+        .insert({
+          customer_id: messageCustomer.id,
+          sender: "Admin",
+          sender_type: "admin",
+          message: trimmedMessage,
+          direction: "outbound",
+          audience: "individual",
+          message_type: "message",
+          status: "sent",
+        });
+
+      if (error) {
+        console.error(
+          "ADMIN CUSTOMER MESSAGE ERROR:",
+          error
+        );
+
+        throw error;
+      }
+
+      /*
+       * Refresh the customer's messages
+       * if the profile is currently open.
+       */
+      if (
+        profileCustomer?.customer.id ===
+        messageCustomer.id
+      ) {
+        await loadCustomerMessages(
+          messageCustomer.id
+        );
+      }
+
+      setMessageText("");
+
+      setMessageCustomer(null);
+
+      showNotification(
+        "success",
+        `Message sent to ${messageCustomer.full_name}.`
+      );
+
+      return;
+    }
+
+    /*
+     * =====================================================
+     * BROADCAST MESSAGE TO ALL CUSTOMERS
+     * =====================================================
+     */
+
+    if (showAllCustomersMessage) {
+      if (!customers.length) {
         showNotification(
           "error",
-          "Enter a message first."
+          "There are no customers to message."
         );
 
         return;
       }
 
-      setSendingMessage(true);
-
-      await new Promise(
-        (resolve) =>
-          setTimeout(
-            resolve,
-            500
-          )
+      const messages = customers.map(
+        (customer) => ({
+          customer_id: customer.id,
+          sender: "Admin",
+          sender_type: "admin",
+          message: trimmedMessage,
+          direction: "outbound",
+          audience: "all",
+          message_type: "message",
+          status: "sent",
+        })
       );
 
-      setSendingMessage(
-        false
-      );
+      const { error } = await supabase
+        .from("customer_messages")
+        .insert(messages);
+
+      if (error) {
+        console.error(
+          "ADMIN BROADCAST MESSAGE ERROR:",
+          error
+        );
+
+        throw error;
+      }
 
       setMessageText("");
 
+      setShowAllCustomersMessage(false);
+
       showNotification(
-        "error",
-        "Messaging Backend Required — message was not sent."
+        "success",
+        `Message sent to ${customers.length} customers.`
       );
 
-      setMessageCustomer(
-        null
-      );
+      return;
+    }
 
-      setShowAllCustomersMessage(
-        false
-      );
-    };
+    showNotification(
+      "error",
+      "No customer was selected."
+    );
+  } catch (error: unknown) {
+    console.error(
+      "ADMIN MESSAGE SEND ERROR:",
+      error
+    );
 
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Unable to send message.";
+
+    showNotification(
+      "error",
+      errorMessage
+    );
+  } finally {
+    setSendingMessage(false);
+  }
+};
 /* =========================================================
    CLOSE ACTION MENU WHEN CLICKING OUTSIDE
 ========================================================== */

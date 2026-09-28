@@ -402,43 +402,42 @@ function isLowStock(item: any) {
 
   const lowStockThresholds: Record<string, number> = {
     /* Production Ingredients */
-    Flour: 400,
-    Sugar: 50,
-    Yeast: 0.5,
-    Butter: 10,
-    "Groundnut Oil": 5,
+    Flour: 200,                 // bags
+    Sugar: 20,                  // bags
+    Yeast: 5,                   // cartons
+    Butter: 10,                 // cartons
+    "Groundnut Oil": 2,         // gallons
 
     /* Recipe Materials */
-    "Iruka Recipe": 10,
-    "White Recipe": 10,
-    "Fruits Recipe": 10,
+    "Iruka Recipe": 10,         // packs
+    "White Recipe": 10,         // packs
+    "Fruits Recipe": 10,        // packs
 
     /* Nylon Packaging */
-    "Small Iruka Nylon": 1000,
-    "Small Rosy Nylon": 1000,
-    "Medium Iruka Nylon": 1000,
-    "Medium Rosy Nylon": 1000,
-    "Big Smart Nylon": 1000,
-    "Classic Iruka Nylon": 1000,
-    "Classic Fruits Nylon": 1000,
-    "Jumbo Iruka Nylon": 1000,
-    "Jumbo Fruits Nylon": 1000,
-    "Big Brother Family Nylon": 1000,
+    "Small Iruka Nylon": 7,     // packs
+    "Small Rosy Nylon": 7,      // packs
+    "Medium Iruka Nylon": 7,    // packs
+    "Medium Rosy Nylon": 7,     // packs
+    "Big Smart Nylon": 7,       // packs
+    "Classic Iruka Nylon": 7,   // packs
+    "Classic Fruits Nylon": 7,  // packs
+    "Jumbo Iruka Nylon": 7,     // packs
+    "Jumbo Fruits Nylon": 7,    // packs
+    "Big Brother Family Nylon": 7, // packs
 
     /* Other Packaging */
-    Tape: 100,
-    Twist: 2,
+    Tape: 15,                   // pieces
+    Twist: 15,                  // packs
 
     /* Bakery Additives */
-    Brown: 5,
-    Resins: 1,
-    Flavour: 1,
+    Brown: 2,                   // buckets
+    Resins: 5,                  // cartons
+    Flavour: 15,                // kg
   };
 
   const threshold = lowStockThresholds[item.name];
 
-  // If the material is not defined above,
-  // keep the existing healthy state.
+  // Material has no configured low-stock threshold
   if (threshold === undefined) {
     return false;
   }

@@ -23,8 +23,10 @@ import {
   Receipt,
   LogOut,
   X,
+  ShieldCheck,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
-
 
 const menuByRole = {
   admin: [
@@ -98,20 +100,36 @@ const menuByRole = {
     },
   ],
 
-cashier: [
-  { name: "Customer Orders", href: "/orders", icon: ShoppingCart },
-  { name: "Customers", href: "/customers", icon: Users },
-  { name: "Debtors", href: "/debtors", icon: Wallet },
-  { name: "Products", href: "/products", icon: Package },
-],
+  cashier: [
+    {
+      name: "Customer Orders",
+      href: "/orders",
+      icon: ShoppingCart,
+    },
+    {
+      name: "Customers",
+      href: "/customers",
+      icon: Users,
+    },
+    {
+      name: "Debtors",
+      href: "/debtors",
+      icon: Wallet,
+    },
+    {
+      name: "Products",
+      href: "/products",
+      icon: Package,
+    },
+  ],
 
-management: [
-  {
-    name: "Staff",
-    href: "/staff",
-    icon: Users,
-  },
-],
+  management: [
+    {
+      name: "Staff",
+      href: "/staff",
+      icon: Users,
+    },
+  ],
 
   accountant: [
     {
@@ -134,9 +152,7 @@ management: [
 
 interface SidebarProps {
   sidebarOpen: boolean;
-  setSidebarOpen: (
-    value: boolean
-  ) => void;
+  setSidebarOpen: (value: boolean) => void;
 }
 
 export default function Sidebar({
@@ -144,50 +160,70 @@ export default function Sidebar({
   setSidebarOpen,
 }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
 
-const router = useRouter();
-const [role, setRole] = useState<string | null>(null);
-useEffect(() => {
-  setRole(localStorage.getItem("role"));
-}, []);
+  const [role, setRole] = useState<string | null>(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-const menu =
-  menuByRole[
-    role as keyof typeof menuByRole
-  ] || [];
+  useEffect(() => {
+    setRole(localStorage.getItem("role"));
+  }, []);
 
-const handleLogout = async () => {
+  const menu =
+    menuByRole[
+      role as keyof typeof menuByRole
+    ] || [];
 
-  await supabase.auth.signOut();
+  /* =========================
+     LOGOUT
+  ========================== */
 
-  localStorage.removeItem("role");
+  const handleLogout = async () => {
+    if (loggingOut) return;
 
-  router.push("/login");
+    try {
+      setLoggingOut(true);
 
-};
+      await supabase.auth.signOut();
+
+      localStorage.removeItem("role");
+
+      router.push("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+      setLoggingOut(false);
+      setShowLogoutModal(false);
+    }
+  };
 
   return (
     <>
-      {/* Mobile Overlay */}
+      {/* =========================
+          MOBILE OVERLAY
+      ========================== */}
+
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() =>
-            setSidebarOpen(false)
-          }
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+          onClick={() => setSidebarOpen(false)}
         />
       )}
 
+      {/* =========================
+          SIDEBAR
+      ========================== */}
+
       <div
         className={`
-          fixed top-0 left-0 z-50
-          w-[280px]
-          h-screen
+          fixed left-0 top-0 z-50
+          flex h-screen w-[280px]
+          flex-col justify-between
+          overflow-y-auto
+          border-r border-white/[0.06]
           bg-[#071028]
           text-white
-          flex flex-col
-          justify-between
-          overflow-y-auto
+          shadow-2xl shadow-black/30
           transition-transform duration-300
 
           ${
@@ -199,101 +235,347 @@ const handleLogout = async () => {
           lg:translate-x-0
         `}
       >
+
+        {/* =========================
+            MAIN SIDEBAR CONTENT
+        ========================== */}
+
         <div>
-          {/* Mobile Close Button */}
+
+          {/* Mobile Close */}
+
           <div className="flex justify-end p-4 lg:hidden">
+
             <button
-              onClick={() =>
-                setSidebarOpen(false)
-              }
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-gray-400 transition-all hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-300"
             >
-              <X size={24} />
+              <X size={21} />
             </button>
+
           </div>
 
-          {/* Logo */}
-<div className="p-6 border-b border-white/10 text-center">
+          {/* =========================
+              LOGO
+          ========================== */}
 
-  <Image
-    src="/logo/nkiruka-logo.png"
-    alt="NKIRUKA Logo"
-    width={80}
-    height={80}
-    className="mx-auto mb-3"
-  />
+          <div className="border-b border-white/[0.06] p-6 text-center">
 
-  <h1 className="text-lg font-black text-yellow-500">
-    NKIRUKA / IRUKA
-  </h1>
+            <div className="relative mx-auto mb-3 flex h-[80px] w-[80px] items-center justify-center">
 
-  <p className="text-xs text-gray-400">
-    INDUSTRIES LTD
-  </p>
+              <div className="absolute inset-0 rounded-full bg-yellow-500/10 blur-xl" />
 
-</div>
+              <Image
+                src="/logo/nkiruka-logo.png"
+                alt="NKIRUKA Logo"
+                width={80}
+                height={80}
+                className="relative mx-auto"
+              />
 
-          {/* User Card */}
-          <div className="p-6">
-            <div className="bg-[#0d1838] rounded-2xl p-4 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-yellow-500 text-black font-black flex items-center justify-center">
-                A
-              </div>
-
-              <div>
-                <p className="font-bold">
-                  CEO Admin
-                </p>
-
-                <p className="text-sm text-gray-400">
-                  Administrator
-                </p>
-              </div>
             </div>
+
+            <h1 className="text-lg font-black tracking-tight text-yellow-500">
+              NKIRUKA / IRUKA
+            </h1>
+
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
+              Industries Ltd
+            </p>
+
           </div>
 
-          {/* Menu */}
-<div className="px-4 space-y-2">
-  {!role ? null : menu.map((item) => {
-              const Icon = item.icon;
+          {/* =========================
+              USER CARD
+          ========================== */}
 
-              const active =
-                pathname === item.href;
+          <div className="p-5">
 
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  onClick={() =>
-                    setSidebarOpen(false)
-                  }
-                  className={
-                    active
-                      ? "flex items-center gap-4 px-5 py-4 rounded-2xl bg-yellow-500 text-black font-bold"
-                      : "flex items-center gap-4 px-5 py-4 rounded-2xl text-gray-300 hover:bg-[#0d1838] transition-all"
-                  }
-                >
-                  <Icon size={22} />
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0d1838] p-4 shadow-lg">
 
-                  <span>
-                    {item.name}
-                  </span>
-                </Link>
-              );
-              })}
+              <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-yellow-500/5 blur-2xl" />
+
+              <div className="relative flex items-center gap-4">
+
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-yellow-400/20 bg-gradient-to-br from-yellow-400 to-amber-600 font-black text-black shadow-lg shadow-yellow-950/20">
+                  A
+                </div>
+
+                <div className="min-w-0">
+
+                  <div className="flex items-center gap-2">
+
+                    <p className="truncate font-bold text-white">
+                      CEO Admin
+                    </p>
+
+                    <ShieldCheck
+                      size={15}
+                      className="shrink-0 text-emerald-400"
+                    />
+
+                  </div>
+
+                  <p className="mt-0.5 text-sm text-gray-400">
+                    Administrator
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
           </div>
+
+          {/* =========================
+              MENU
+          ========================== */}
+
+          <div className="space-y-2 px-4">
+
+            {!role
+              ? null
+              : menu.map((item) => {
+
+                  const Icon = item.icon;
+
+                  const active =
+                    pathname === item.href;
+
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      onClick={() =>
+                        setSidebarOpen(false)
+                      }
+                      className={
+                        active
+                          ? "group flex items-center gap-4 rounded-2xl bg-gradient-to-r from-yellow-400 to-amber-500 px-5 py-4 font-bold text-black shadow-lg shadow-yellow-950/20 transition-all"
+                          : "group flex items-center gap-4 rounded-2xl border border-transparent px-5 py-4 text-gray-300 transition-all hover:border-white/[0.05] hover:bg-[#0d1838] hover:text-white"
+                      }
+                    >
+
+                      <Icon
+                        size={21}
+                        className={
+                          active
+                            ? "text-black"
+                            : "text-gray-400 transition-colors group-hover:text-yellow-400"
+                        }
+                      />
+
+                      <span>
+                        {item.name}
+                      </span>
+
+                      {active && (
+                        <span className="ml-auto h-2 w-2 rounded-full bg-black/60" />
+                      )}
+
+                    </Link>
+                  );
+                })}
+
+          </div>
+
         </div>
 
-        {/* Logout */}
-        <div className="p-6">
-<button
-  onClick={handleLogout}
-  className="w-full bg-red-600 hover:bg-red-700 transition-all rounded-2xl py-4 flex items-center justify-center gap-3 font-bold"
->
-  <LogOut size={20} />
-  Logout
-</button>
+        {/* =========================
+            LOGOUT AREA
+        ========================== */}
+
+        <div className="border-t border-white/[0.06] p-5">
+
+          <button
+            type="button"
+            onClick={() => setShowLogoutModal(true)}
+            disabled={loggingOut}
+            className="
+              group relative w-full overflow-hidden
+              rounded-2xl
+              border border-red-500/20
+              bg-red-500/[0.06]
+              px-5 py-4
+              text-red-300
+              shadow-lg shadow-black/10
+              transition-all duration-300
+              hover:border-red-400/40
+              hover:bg-red-500/10
+              hover:text-red-200
+              hover:shadow-red-950/20
+              disabled:cursor-not-allowed
+              disabled:opacity-60
+            "
+          >
+
+            <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-red-400 to-red-600 opacity-60 transition-opacity group-hover:opacity-100" />
+
+            <div className="relative flex items-center justify-center gap-3">
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-red-400/20 bg-red-500/10 transition-all group-hover:bg-red-500/20">
+
+                <LogOut size={18} />
+
+              </div>
+
+              <div className="text-left">
+
+                <p className="text-sm font-black">
+                  Sign Out
+                </p>
+
+                <p className="text-[11px] text-red-300/50">
+                  End your current session
+                </p>
+
+              </div>
+
+            </div>
+
+          </button>
+
+          <p className="mt-3 text-center text-[10px] font-medium uppercase tracking-[0.16em] text-gray-600">
+            IRUKA ERP • Secure Session
+          </p>
+
         </div>
+
       </div>
+
+      {/* =========================
+          LOGOUT CONFIRMATION MODAL
+      ========================== */}
+
+      {showLogoutModal && (
+
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md"
+          onClick={() => {
+            if (!loggingOut) {
+              setShowLogoutModal(false);
+            }
+          }}
+        >
+
+          <div
+            className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#0b1428] shadow-2xl shadow-black/50"
+            onClick={(e) => e.stopPropagation()}
+          >
+
+            {/* TOP ACCENT */}
+
+            <div className="h-1 bg-gradient-to-r from-red-500 via-orange-500 to-red-500" />
+
+            <div className="p-7">
+
+              {/* ICON */}
+
+              <div className="flex justify-center">
+
+                <div className="relative">
+
+                  <div className="absolute inset-0 rounded-2xl bg-red-500/20 blur-xl" />
+
+                  <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-red-400/20 bg-red-500/10 text-red-300">
+
+                    <AlertTriangle size={29} />
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* TEXT */}
+
+              <div className="mt-6 text-center">
+
+                <h2 className="text-2xl font-black text-white">
+                  Sign out of IRUKA ERP?
+                </h2>
+
+                <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-gray-400">
+                  Your current ERP session will be ended.
+                  You can sign in again whenever you are
+                  ready.
+                </p>
+
+              </div>
+
+              {/* ACTIONS */}
+
+              <div className="mt-7 grid grid-cols-2 gap-3">
+
+                <button
+                  type="button"
+                  disabled={loggingOut}
+                  onClick={() =>
+                    setShowLogoutModal(false)
+                  }
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3.5 font-bold text-gray-300 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Stay Signed In
+                </button>
+
+                <button
+                  type="button"
+                  disabled={loggingOut}
+                  onClick={handleLogout}
+                  className="rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-3.5 font-black text-red-300 transition-all hover:border-red-400/40 hover:bg-red-500/20 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+
+                  {loggingOut ? (
+
+                    <span className="flex items-center justify-center gap-2">
+
+                      <Loader2
+                        size={18}
+                        className="animate-spin"
+                      />
+
+                      Signing out...
+
+                    </span>
+
+                  ) : (
+
+                    <span className="flex items-center justify-center gap-2">
+
+                      <LogOut size={18} />
+
+                      Sign Out
+
+                    </span>
+
+                  )}
+
+                </button>
+
+              </div>
+
+              {/* SECURITY NOTE */}
+
+              <div className="mt-5 flex items-center justify-center gap-2 text-[11px] text-gray-600">
+
+                <ShieldCheck size={13} />
+
+                <span>
+                  Your session will be securely terminated
+                </span>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
+
     </>
   );
 }

@@ -155,19 +155,12 @@ export default function InventoryHistory({
                   {/* QUANTITY */}
 
 <td className="p-4 text-center text-amber-300 font-black">
-
   {Number(
     item.quantity_used || 0
   ).toLocaleString()}{" "}
 
-  {item.material_name === "Brown"
-    ? "kg"
-    : item.material_name.includes("Nylon")
-    ? "Pieces"
-    : ""}
-
+  {item.unit || ""}
 </td>
-
                   {/* REFERENCE */}
 
                   <td className="p-4 text-center text-slate-300">

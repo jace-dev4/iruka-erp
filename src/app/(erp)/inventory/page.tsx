@@ -266,7 +266,6 @@ const [editQuantity, setEditQuantity] =
 ========================== */
 
 async function editReceivedInventory() {
-
   if (!editingTransaction) {
     return;
   }
@@ -281,92 +280,26 @@ async function editReceivedInventory() {
     return;
   }
 
-  const oldQuantity =
-    Number(editingTransaction.quantity_used || 0);
-
-  const difference =
-    newQuantity - oldQuantity;
-
   try {
+    const { data, error } = await supabase.rpc(
+      "correct_received_inventory",
+      {
+        p_transaction_id: editingTransaction.id,
+        p_new_quantity: newQuantity,
+      }
+    );
 
-    /* =========================
-       FIND INVENTORY ITEM
-    ========================== */
-
-    const { data: inventoryItem, error: inventoryError } =
-      await supabase
-        .from("inventory")
-        .select("*")
-        .eq(
-          "name",
-          editingTransaction.material_name
-        )
-        .single();
-
-    if (inventoryError) {
-      throw inventoryError;
+    if (error) {
+      throw error;
     }
 
-    if (!inventoryItem) {
-      throw new Error(
-        "Inventory item not found."
-      );
-    }
+    console.log(
+      "Corrected inventory quantity:",
+      data
+    );
 
-    /* =========================
-       CALCULATE CORRECT STOCK
-    ========================== */
-
-    const currentQuantity =
-      Number(inventoryItem.quantity || 0);
-
-    const correctedQuantity =
-      currentQuantity + difference;
-
-    if (correctedQuantity < 0) {
-      throw new Error(
-        "This correction would make inventory quantity negative."
-      );
-    }
-
-    /* =========================
-       UPDATE INVENTORY
-    ========================== */
-
-    const { error: inventoryUpdateError } =
-      await supabase
-        .from("inventory")
-        .update({
-          quantity: correctedQuantity,
-        })
-        .eq("id", inventoryItem.id);
-
-    if (inventoryUpdateError) {
-      throw inventoryUpdateError;
-    }
-
-    /* =========================
-       UPDATE HISTORY ENTRY
-    ========================== */
-
-    const { error: transactionUpdateError } =
-      await supabase
-        .from("inventory_transactions")
-        .update({
-          quantity_used: newQuantity,
-        })
-        .eq(
-          "id",
-          editingTransaction.id
-        );
-
-    if (transactionUpdateError) {
-      throw transactionUpdateError;
-    }
-
-    /* =========================
-       CLOSE EDIT
-    ========================== */
+    const materialName =
+      editingTransaction.material_name;
 
     setEditingTransaction(null);
     setEditQuantity("");
@@ -375,7 +308,7 @@ async function editReceivedInventory() {
 
     showNotification(
       "success",
-      `${editingTransaction.material_name} inventory entry corrected successfully.`
+      `${materialName} inventory entry corrected successfully.`
     );
 
   } catch (error: any) {
@@ -913,10 +846,12 @@ function isLowStock(item: any) {
             INVENTORY TABLE
         ========================== */}
 
-        <InventoryMaterials
-          inventory={inventory}
-          isLowStock={isLowStock}
-        />
+<InventoryMaterials
+  inventory={inventory}
+  isLowStock={isLowStock}
+  showNotification={showNotification}
+  onInventoryUpdated={fetchInventory}
+/>
 
         {/* =========================
             RECIPE INVENTORY

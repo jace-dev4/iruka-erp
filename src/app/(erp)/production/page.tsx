@@ -77,6 +77,25 @@ export default function ProductionPage() {
   const [selectedKpiDate, setSelectedKpiDate] =
     useState(getLocalDate());
 
+      /* =========================
+     LIVE CLOCK
+  ========================== */
+
+  const [currentTime, setCurrentTime] =
+    useState(new Date());
+
+  /* =========================
+     PRODUCTION PERIOD FILTER
+  ========================== */
+
+  const [productionPeriod, setProductionPeriod] =
+    useState<
+      "Today" |
+      "This Week" |
+      "This Month" |
+      "This Year"
+    >("Today");
+
   /* =========================
      PREMIUM NOTIFICATIONS
   ========================== */
@@ -96,6 +115,31 @@ export default function ProductionPage() {
 
   const [deleting, setDeleting] =
     useState(false);
+
+    /* =========================
+   EDIT PRODUCTION
+========================= */
+
+const [showEditModal, setShowEditModal] =
+  useState(false);
+
+const [productionToEdit, setProductionToEdit] =
+  useState<any>(null);
+
+const [editing, setEditing] =
+  useState(false);
+
+const [editQuantity, setEditQuantity] =
+  useState("");
+
+const [editDoughBatches, setEditDoughBatches] =
+  useState("");
+
+const [editShift, setEditShift] =
+  useState("Morning");
+
+const [editWaste, setEditWaste] =
+  useState("");
 
   const selectedProductData = products.find(
     (product) => product.name === selectedProduct
@@ -130,6 +174,21 @@ export default function ProductionPage() {
 
   useEffect(() => {
     fetchData();
+  }, []);
+    /* =========================
+     LIVE LAGOS CLOCK
+  ========================== */
+
+  useEffect(() => {
+
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+
   }, []);
 
   /* =========================
@@ -1006,11 +1065,139 @@ quantity_used:
      STORE CONFIRMATION
   ========================== */
 
+  /* =========================
+     PRODUCTION PERIOD FILTER
+  ========================== */
+
+  function getPeriodStart(
+    period:
+      | "Today"
+      | "This Week"
+      | "This Month"
+      | "This Year"
+  ) {
+
+    const todayString = getLocalDate();
+
+    const [year, month, day] =
+      todayString.split("-").map(Number);
+
+    const today = new Date(
+      Date.UTC(
+        year,
+        month - 1,
+        day
+      )
+    );
+
+    if (period === "Today") {
+
+      return todayString;
+
+    }
+
+    if (period === "This Week") {
+
+      const dayOfWeek =
+        today.getUTCDay();
+
+      /*
+       * Sunday = 0
+       * Monday = 1
+       *
+       * We treat Monday as the
+       * beginning of the production week.
+       */
+
+      const daysFromMonday =
+        dayOfWeek === 0
+          ? 6
+          : dayOfWeek - 1;
+
+      today.setUTCDate(
+        today.getUTCDate() -
+        daysFromMonday
+      );
+
+    }
+
+    if (period === "This Month") {
+
+      today.setUTCDate(1);
+
+    }
+
+    if (period === "This Year") {
+
+      today.setUTCMonth(0);
+      today.setUTCDate(1);
+
+    }
+
+    return [
+      today.getUTCFullYear(),
+      String(
+        today.getUTCMonth() + 1
+      ).padStart(2, "0"),
+      String(
+        today.getUTCDate()
+      ).padStart(2, "0"),
+    ].join("-");
+  }
+
+  const productionPeriodStart =
+    getPeriodStart(
+      productionPeriod
+    );
+
+  const todayForPeriod =
+    getLocalDate();
+
+  /* =========================
+     FILTER PRODUCTION RECORDS
+  ========================== */
+
+  const periodProductionLogs =
+    productionLogs.filter((log) => {
+
+      const productionDate =
+        log.production_date ||
+        (
+          log.created_at
+            ? new Date(
+                log.created_at
+              ).toLocaleDateString(
+                "en-CA",
+                {
+                  timeZone:
+                    "Africa/Lagos",
+                }
+              )
+            : ""
+        );
+
+      return (
+        productionDate >=
+          productionPeriodStart &&
+        productionDate <=
+          todayForPeriod
+      );
+
+    });
+
+  /* =========================
+     PENDING STORE CONFIRMATION
+  ========================== */
+
   const pendingProductions =
-    productionLogs.filter(
+    periodProductionLogs.filter(
       (log) =>
-        log.confirmation_status !==
-        "Confirmed"
+        String(
+          log.confirmation_status || ""
+        )
+          .trim()
+          .toLowerCase() !==
+        "confirmed"
     );
 
   function openConfirmation(
@@ -1026,215 +1213,232 @@ quantity_used:
     setShowProductionDetails(true);
   }
 
-  async function confirmProduction() {
+async function confirmProduction() {
+  if (!selectedProduction) return;
 
-    if (confirming) return;
+  const produced = Number(selectedProduction.quantity || 0);
 
-    const log =
-      selectedProduction;
+  // =========================
+  // OPTIONAL VALUES
+  // =========================
 
-    if (!log) return;
+  // Empty received = assume all produced pieces were received
+  const hasReceivedValue =
+    confirmationReceived !== "" &&
+    confirmationReceived !== null &&
+    confirmationReceived !== undefined;
 
-    const produced =
-      Number(
-        log.quantity || 0
-      );
+  // Empty damage = assume zero damage
+  const hasDamageValue =
+    confirmationDamage !== "" &&
+    confirmationDamage !== null &&
+    confirmationDamage !== undefined;
 
-    const received =
-      Number(
-        confirmationReceived || 0
-      );
+  const enteredReceived = hasReceivedValue
+    ? Number(confirmationReceived)
+    : null;
 
-    const damage =
-      Number(
-        confirmationDamage || 0
-      );
+  const enteredDamage = hasDamageValue
+    ? Number(confirmationDamage)
+    : 0;
 
-    if (received < 0 || damage < 0) {
+  // =========================
+  // VALIDATE DAMAGE
+  // =========================
 
-      showNotification(
-        "error",
-        "Invalid Confirmation",
-        "Received and damaged quantities cannot be negative."
-      );
-
-      return;
-    }
-
-    if (
-      received +
-      damage >
-      produced
-    ) {
-
-      showNotification(
-        "error",
-        "Invalid Quantities",
-        `Received plus damaged pieces cannot exceed the ${produced.toLocaleString()} pieces produced.`
-      );
-
-      return;
-    }
-
-    const missing =
-      produced -
-      received -
-      damage;
-
-    setConfirming(true);
-
-    try {
-
-      /* =========================
-         GET CURRENT PRODUCT
-      ========================== */
-
-      const {
-        data: product,
-        error: productError,
-      } = await supabase
-        .from("products")
-        .select("*")
-        .eq("id", log.product_id)
-        .single();
-
-      if (
-        productError ||
-        !product
-      ) {
-
-        throw new Error(
-          "Finished product was not found."
-        );
-
-      }
-
-      /* =========================
-         ADD ONLY RECEIVED
-         TO FINISHED GOODS STOCK
-      ========================== */
-
-      const currentStock =
-        Number(
-          product.stock || 0
-        );
-
-      const newStock =
-        currentStock +
-        received;
-
-      const {
-        error: stockError,
-      } = await supabase
-        .from("products")
-        .update({
-          stock: newStock,
-        })
-        .eq(
-          "id",
-          product.id
-        );
-
-      if (stockError) {
-
-        throw new Error(
-          `Failed to update ${log.bread} stock: ${stockError.message}`
-        );
-
-      }
-
-      /* =========================
-         UPDATE PRODUCTION LOG
-      ========================== */
-
-      const {
-        error: confirmationError,
-      } = await supabase
-        .from("production_logs")
-        .update({
-          received_quantity:
-            received,
-
-          confirmation_damage:
-            damage,
-
-          confirmation_status:
-            "Confirmed",
-
-          confirmed_at:
-            new Date().toISOString(),
-
-          confirmed_by:
-            "Store",
-        })
-        .eq(
-          "id",
-          log.id
-        );
-
-      if (confirmationError) {
-
-        /*
-         * If the confirmation update fails,
-         * reverse the stock addition so we
-         * don't leave inconsistent finished stock.
-         */
-        await supabase
-          .from("products")
-          .update({
-            stock: currentStock,
-          })
-          .eq(
-            "id",
-            product.id
-          );
-
-        throw new Error(
-          `Production confirmation failed: ${confirmationError.message}`
-        );
-
-      }
-
-      await fetchData();
-
-      setSelectedProduction(null);
-
-      setShowProductionDetails(false);
-
-      setConfirmationReceived("");
-
-      setConfirmationDamage("");
-
-      showNotification(
-        "success",
-        "Production Confirmed",
-        `${log.bread}: ${received.toLocaleString()} received, ${damage.toLocaleString()} damaged and ${missing.toLocaleString()} missing.`
-      );
-
-    } catch (error: any) {
-
-      console.error(
-        "Production confirmation error:",
-        error
-      );
-
-      showNotification(
-        "error",
-        "Confirmation Failed",
-        error?.message ||
-        "Failed to confirm production."
-      );
-
-    } finally {
-
-      setConfirming(false);
-
-    }
+  if (!Number.isFinite(enteredDamage) || enteredDamage < 0) {
+    showNotification(
+      "error",
+      "Invalid Damaged Quantity",
+      "Please enter a valid number of damaged pieces."
+    );
+    return;
   }
+
+  // =========================
+  // CALCULATE RECEIVED
+  // =========================
+
+  let received: number;
+
+  if (enteredReceived === null) {
+    // Nothing entered = everything produced was received
+    received = produced - enteredDamage;
+  } else {
+    received = enteredReceived;
+  }
+
+  // =========================
+  // VALIDATE RECEIVED
+  // =========================
+
+  if (!Number.isFinite(received) || received < 0) {
+    showNotification(
+      "error",
+      "Invalid Received Quantity",
+      "Please enter a valid number of pieces received."
+    );
+    return;
+  }
+
+  // =========================
+  // VALIDATE TOTAL
+  // =========================
+
+  if (received + enteredDamage > produced) {
+    showNotification(
+      "error",
+      "Invalid Stock Confirmation",
+      `Received (${received}) + Damaged (${enteredDamage}) cannot be greater than produced quantity (${produced}).`
+    );
+    return;
+  }
+
+  setConfirming(true);
+
+  try {
+    // =========================
+    // CALCULATE MISSING
+    // =========================
+
+    const missing = produced - received - enteredDamage;
+
+    // =========================
+    // GET CURRENT PRODUCT
+    // =========================
+
+    const { data: product, error: productError } = await supabase
+      .from("products")
+      .select("id, name, stock")
+      .eq("id", selectedProduction.product_id)
+      .single();
+
+    if (productError || !product) {
+      throw new Error(
+        productError?.message || "Product could not be found."
+      );
+    }
+
+    const currentStock = Number(product.stock || 0);
+
+    // =========================
+    // ADD RECEIVED STOCK
+    // =========================
+
+    const newStock = currentStock + received;
+
+    const { error: stockError } = await supabase
+      .from("products")
+      .update({
+        stock: newStock,
+      })
+      .eq("id", selectedProduction.product_id);
+
+    if (stockError) {
+      throw new Error(
+        `Product stock update failed: ${stockError.message}`
+      );
+    }
+
+    // =========================
+    // CONFIRM PRODUCTION
+    // =========================
+
+    const { error: confirmationError } = await supabase
+      .from("production_logs")
+      .update({
+        received_quantity: received,
+        confirmation_damage: enteredDamage,
+        confirmation_status: "Confirmed",
+        status: "Confirmed",
+        confirmed_at: new Date().toISOString(),
+        confirmed_by: "Store",
+      })
+      .eq("id", selectedProduction.id);
+
+    // =========================
+    // ROLLBACK STOCK IF FAILED
+    // =========================
+
+    if (confirmationError) {
+      await supabase
+        .from("products")
+        .update({
+          stock: currentStock,
+        })
+        .eq("id", selectedProduction.product_id);
+
+      throw new Error(
+        `Production confirmation failed: ${confirmationError.message}`
+      );
+    }
+
+    // =========================
+    // REFRESH DATA
+    // =========================
+
+    await fetchData();
+
+    // =========================
+    // CLOSE CONFIRMATION
+    // =========================
+
+    setShowProductionDetails(false);
+    setSelectedProduction(null);
+
+    setConfirmationReceived("");
+    setConfirmationDamage("");
+
+    // =========================
+    // SUCCESS
+    // =========================
+
+    showNotification(
+      "success",
+      "Stock Received Successfully",
+      `${received} pieces of ${product.name} have been added to product stock.${enteredDamage > 0 ? ` ${enteredDamage} damaged.` : ""}${missing > 0 ? ` ${missing} missing.` : ""}`
+    );
+
+  } catch (error: any) {
+    console.error("CONFIRM STOCK ERROR:", error);
+
+    showNotification(
+      "error",
+      "Stock Confirmation Failed",
+      error?.message || "Unable to confirm received stock."
+    );
+
+  } finally {
+    setConfirming(false);
+  }
+}
 
   /* =========================
      DELETE PRODUCTION
   ========================== */
+
+  function openEditProduction(log: any) {
+  setProductionToEdit(log);
+
+  setEditQuantity(String(log.quantity ?? ""));
+  setEditDoughBatches(String(log.dough_batches ?? ""));
+  setEditShift(log.shift || "Morning");
+  setEditWaste(String(log.waste_quantity ?? 0));
+
+  setShowEditModal(true);
+}
+
+function closeEditProduction() {
+  if (editing) return;
+
+  setShowEditModal(false);
+  setProductionToEdit(null);
+
+  setEditQuantity("");
+  setEditDoughBatches("");
+  setEditShift("Morning");
+  setEditWaste("");
+}
 
   function requestDeleteProduction(
     log: any
@@ -1244,6 +1448,7 @@ quantity_used:
 
     setShowDeleteModal(true);
   }
+  
 
   async function deleteProduction() {
 
@@ -2033,8 +2238,8 @@ const totalMissing =
      PRODUCTION HISTORY
   ========================== */
 
-  const filteredHistory =
-    productionLogs
+const filteredHistory =
+    periodProductionLogs
 
       .filter((item) => {
 
@@ -2713,89 +2918,133 @@ const totalMissing =
 
         )}
 
-        {/* ==========================================
-                    HEADER
-        ========================================== */}
+{/* ==========================================
+            HEADER
+========================================== */}
 
-        <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-8 mb-10">
+<div className="mb-10">
 
-          <div>
+  {/* TOP */}
+  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
 
-            <h1 className="text-5xl font-black text-white">
-              Production Center
-            </h1>
+    {/* LEFT */}
+    <div>
 
-            <p className="text-slate-400 mt-3 text-lg">
-              Live bakery production, dough tracking and inventory automation
-            </p>
+      <h1 className="text-5xl font-black tracking-tight text-white">
+        Production Center
+      </h1>
 
-          </div>
+      <p className="text-slate-400 mt-3 text-lg">
+        Manage daily production
+      </p>
 
-          <div className="flex items-center gap-3">
+    </div>
 
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="group flex items-center gap-3 px-5 py-4 rounded-2xl border border-slate-700 bg-slate-900 hover:bg-slate-800 hover:border-slate-600 text-white font-bold transition-all shadow-xl disabled:opacity-60"
-            >
 
-              <svg
-                className={`w-5 h-5 transition-transform ${
-                  refreshing
-                    ? "animate-spin"
-                    : "group-hover:rotate-180"
-                }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+    {/* RIGHT — LIVE TIME + DATE */}
+    <div className="text-left lg:text-right">
 
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0118.9 6.1L20 7M18.5 15A7.5 7.5 0 015.1 17.9L4 17"
-                />
+      <div className="text-4xl font-black text-white tabular-nums tracking-tight">
 
-              </svg>
+        {currentTime.toLocaleTimeString(
+          "en-NG",
+          {
+            timeZone: "Africa/Lagos",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: true,
+          }
+        )}
 
-              {refreshing
-                ? "Refreshing..."
-                : "Refresh"}
+      </div>
 
-            </button>
+      <div className="text-slate-400 text-lg font-semibold mt-2">
 
-            <div className="bg-slate-900 border border-slate-700 rounded-3xl px-8 py-6">
+        {currentTime.toLocaleDateString(
+          "en-NG",
+          {
+            timeZone: "Africa/Lagos",
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }
+        )}
 
-              <p className="text-slate-400">
-                Today
-              </p>
+      </div>
 
-              <h2 className="text-2xl font-bold text-white mt-2">
+    </div>
 
-                {new Date().toLocaleDateString(
-                  "en-GB",
-                  {
-                    timeZone: "Africa/Lagos",
-                    weekday: "long",
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  }
-                )}
+  </div>
 
-              </h2>
 
-              <p className="text-yellow-400 mt-3 font-semibold">
-                Production Operations
-              </p>
+  {/* PERIOD FILTERS */}
+  <div className="mt-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
 
-            </div>
+    <div className="flex flex-wrap items-center gap-2">
 
-          </div>
+      {(
+        [
+          "Today",
+          "This Week",
+          "This Month",
+          "This Year",
+        ] as const
+      ).map((period) => (
 
-        </div>
+        <button
+          key={period}
+          onClick={() => setProductionPeriod(period)}
+          className={`px-5 py-3 rounded-xl text-sm font-bold transition-all ${
+            productionPeriod === period
+              ? "bg-yellow-500 text-black shadow-lg shadow-yellow-900/30"
+              : "bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800 hover:text-white hover:border-slate-600"
+          }`}
+        >
 
+          {period}
+
+        </button>
+
+      ))}
+
+    </div>
+
+
+    {/* REFRESH */}
+    <button
+      onClick={handleRefresh}
+      disabled={refreshing}
+      className="group flex items-center justify-center gap-3 px-5 py-3 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 hover:border-slate-600 text-white font-bold transition-all shadow-xl disabled:opacity-60"
+    >
+
+      <svg
+        className={`w-5 h-5 transition-transform ${
+          refreshing
+            ? "animate-spin"
+            : "group-hover:rotate-180"
+        }`}
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+          d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0118.9 6.1L20 7M18.5 15A7.5 7.5 0 015.1 17.9L4 17"
+        />
+
+      </svg>
+
+      {refreshing ? "Refreshing..." : "Refresh"}
+
+    </button>
+
+  </div>
+
+</div>
         {/* ==========================================
                     KPI DATE FILTER
         ========================================== */}

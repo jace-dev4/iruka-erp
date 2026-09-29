@@ -1091,171 +1091,261 @@ const {
     }
   }
 
-  // ============================================================
-  // COMPLETE CUSTOMER ORDER
-  // ============================================================
+// ============================================================
+// COMPLETE CUSTOMER ORDER
+// ============================================================
 
-  async function completeCustomerOrder(
-    order: any
+async function completeCustomerOrder(
+  order: any
+) {
+  if (
+    order.order_status === "Completed" ||
+    order.status === "Completed"
   ) {
-    if (
-      order.order_status ===
-      "Completed"
-    ) {
-      showToast(
-        "info",
-        "Already Completed",
-        "This order has already been completed."
-      );
-      return;
-    }
+    showToast(
+      "info",
+      "Already Completed",
+      "This order has already been completed."
+    );
+    return;
+  }
+
+  try {
+    // ==========================================================
+    // 1. GET ALL ORDER ITEMS
+    // ==========================================================
 
     const {
       data: items,
-      error,
+      error: itemsError,
     } = await supabase
       .from("order_items")
       .select("*")
-      .eq(
-        "order_id",
-        order.id
-      );
+      .eq("order_id", order.id);
 
-    if (error) {
-      showToast(
-        "error",
-        "Order Error",
-        error.message
+    if (itemsError) {
+      throw new Error(
+        `Could not load order items: ${itemsError.message}`
       );
-      return;
     }
 
-    for (const item of items || []) {
+    if (!items || items.length === 0) {
+      throw new Error(
+        "This order has no products to complete."
+      );
+    }
+
+    // ==========================================================
+    // 2. LOAD AND VALIDATE ALL PRODUCTS FIRST
+    //
+    // IMPORTANT:
+    // We do NOT change stock yet.
+    // We validate the entire order before making any changes.
+    // ==========================================================
+
+    const preparedItems: any[] = [];
+
+    for (const item of items) {
+      const quantity = Number(item.quantity || 0);
+
+      if (quantity <= 0) {
+        throw new Error(
+          `Invalid quantity for ${item.bread_type}.`
+        );
+      }
+
       const {
         data: product,
         error: productError,
       } = await supabase
         .from("products")
         .select("*")
-        .eq(
-          "name",
-          item.bread_type
-        )
+        .eq("name", item.bread_type)
         .single();
 
-      if (
-        productError ||
-        !product
-      ) {
-        showToast(
-          "error",
-          "Product Not Found",
+      if (productError || !product) {
+        throw new Error(
           `Product not found: ${item.bread_type}`
         );
-        return;
       }
 
-      if (
-        Number(product.stock || 0) <
-        Number(item.quantity)
-      ) {
-        showToast(
-          "error",
-          "Insufficient Stock",
-          `${item.bread_type} does not have enough stock.`
+      const currentStock = Number(
+        product.stock || 0
+      );
+
+      if (currentStock < quantity) {
+        throw new Error(
+          `${item.bread_type} does not have enough stock. Available: ${currentStock.toLocaleString()}, requested: ${quantity.toLocaleString()}.`
         );
-        return;
       }
 
-      const newStock =
-        Number(product.stock || 0) -
-        Number(item.quantity);
+      const unitPrice = Number(
+        product.price || item.unit_price || 0
+      );
 
-      const {
-        error: updateError,
-      } = await supabase
-        .from("products")
-        .update({
-          stock: newStock,
-        })
-        .eq(
-          "id",
-          product.id
-        );
-
-      if (updateError) {
-        showToast(
-          "error",
-          "Stock Update Failed",
-          updateError.message
-        );
-        return;
-      }
-
-      // --------------------------------------------------------
-      // CREATE SALES RECORD
-      // --------------------------------------------------------
-
-      const unitPrice =
-        Number(product.price || 0);
-
-      const quantity =
-        Number(item.quantity);
-
-      const total =
+      const lineTotal =
         unitPrice * quantity;
 
-      const {
-        error: salesError,
-      } = await supabase
-        .from("sales")
-        .insert({
+      preparedItems.push({
+        item,
+        product,
+        quantity,
+        currentStock,
+        unitPrice,
+        lineTotal,
+      });
+    }
+
+    // ==========================================================
+    // 3. CALCULATE TOTALS
+    // ==========================================================
+
+    const calculatedSalesTotal =
+      preparedItems.reduce(
+        (sum, line) =>
+          sum + line.lineTotal,
+        0
+      );
+
+    const orderTotal = Number(
+      order.total_amount || calculatedSalesTotal
+    );
+
+    const amountPaid = Math.max(
+      Number(order.amount_paid || 0),
+      0
+    );
+
+    const orderBalance = Math.max(
+      orderTotal - amountPaid,
+      0
+    );
+
+    // ==========================================================
+    // 4. PREPARE PAYMENT ALLOCATION
+    //
+    // If an order contains multiple products, we distribute the
+    // amount paid across the product sales proportionally.
+    //
+    // Example:
+    //
+    // Order total = ₦100,000
+    // Paid        = ₦100,000
+    //
+    // Product A = ₦60,000 → payment ₦60,000
+    // Product B = ₦40,000 → payment ₦40,000
+    //
+    // This prevents the old bug where ₦100,000 was recorded
+    // against every product line.
+    // ==========================================================
+
+    let remainingPayment = amountPaid;
+
+    // ==========================================================
+    // 5. CREATE SALES RECORDS
+    //
+    // IMPORTANT:
+    // - NO customer_id because sales table does not have it.
+    // - Every product gets a unique invoice_number because
+    //   sales.invoice_number has a UNIQUE constraint.
+    // ==========================================================
+
+    const salesRows = preparedItems.map(
+      (line, index) => {
+        let linePayment = 0;
+
+        if (calculatedSalesTotal > 0) {
+          if (
+            index ===
+            preparedItems.length - 1
+          ) {
+            // Put any rounding remainder on the last item.
+            linePayment = Math.min(
+              remainingPayment,
+              Math.max(
+                calculatedSalesTotal -
+                  preparedItems
+                    .slice(0, -1)
+                    .reduce(
+                      (sum, previous) =>
+                        sum +
+                        previous.lineTotal,
+                      0
+                    ),
+                0
+              )
+            );
+
+            // Better proportional allocation for
+            // the final remaining payment.
+            linePayment = Math.min(
+              remainingPayment,
+              line.lineTotal
+            );
+          } else {
+            linePayment = Math.min(
+              remainingPayment,
+              amountPaid *
+                (line.lineTotal /
+                  calculatedSalesTotal)
+            );
+          }
+        }
+
+        linePayment =
+          Math.round(
+            linePayment * 100
+          ) / 100;
+
+        remainingPayment =
+          Math.max(
+            remainingPayment -
+              linePayment,
+            0
+          );
+
+        const lineBalance = Math.max(
+          line.lineTotal - linePayment,
+          0
+        );
+
+        return {
           customer_name:
             order.customer_name ||
             "Walk-in Customer",
 
           total_amount:
-            total,
+            line.lineTotal,
 
           payment:
-            Number(
-              order.amount_paid || 0
-            ),
+            linePayment,
 
           balance:
-            Math.max(
-              Number(
-                order.total_amount || 0
-              ) -
-                Number(
-                  order.amount_paid || 0
-                ),
-              0
-            ),
+            lineBalance,
 
+          // invoice_number is UNIQUE in your database,
+          // so every product line needs its own value.
           invoice_number:
-            order.order_number ||
-            `ORD-${order.id}`,
+            `${order.order_number || `ORD-${order.id}`}-${index + 1}`,
 
           product_id:
-            product.id,
+            line.product.id,
 
           product_name:
-            product.name,
+            line.product.name,
 
           quantity:
-            quantity,
+            line.quantity,
 
           unit_price:
-            unitPrice,
+            line.unitPrice,
 
           cashier:
             typeof window !==
             "undefined"
               ? localStorage.getItem(
                   "full_name"
-                ) ||
-                "System"
+                ) || "System"
               : "System",
 
           payment_method:
@@ -1271,119 +1361,315 @@ const {
               : "Unpaid",
 
           amount_paid:
-            Number(
-              order.amount_paid || 0
-            ),
-
-          customer_id:
-            order.customer_id ||
-            null,
-        });
-
-      if (salesError) {
-        console.error(
-          "Sales creation error:",
-          salesError
-        );
+            linePayment,
+        };
       }
-
-      // --------------------------------------------------------
-      // FINANCE TRANSACTION
-      // --------------------------------------------------------
-
-      const {
-        error: financeError,
-      } = await supabase
-        .from(
-          "finance_transactions"
-        )
-        .insert({
-          transaction_type:
-            "Sale",
-
-          description:
-            `${product.name} sold to ${
-              order.customer_name ||
-              "Walk-in Customer"
-            }`,
-
-          amount:
-            total,
-
-          category:
-            "Sales Revenue",
-
-          reference:
-            order.order_number ||
-            `ORD-${order.id}`,
-
-          payment_method:
-            order.payment_status ===
-            "Paid"
-              ? "Cash"
-              : "Pending",
-
-          status:
-            order.payment_status ===
-            "Paid"
-              ? "Completed"
-              : "Pending",
-
-          created_by:
-            typeof window !==
-            "undefined"
-              ? localStorage.getItem(
-                  "full_name"
-                ) ||
-                "System"
-              : "System",
-        });
-
-      if (financeError) {
-        console.error(
-          "Finance transaction error:",
-          financeError
-        );
-      }
-    }
-
-    // ----------------------------------------------------------
-    // COMPLETE ORDER
-    // ----------------------------------------------------------
+    );
 
     const {
-      error: orderError,
+      error: salesError,
+    } = await supabase
+      .from("sales")
+      .insert(salesRows);
+
+    if (salesError) {
+      throw new Error(
+        `Sales creation failed: ${salesError.message}`
+      );
+    }
+
+    // ==========================================================
+    // 6. CREATE FINANCE TRANSACTIONS
+    //
+    // One finance transaction per product line.
+    // The total of all transactions equals the order total.
+    // ==========================================================
+
+const financeRows =
+  preparedItems.map(
+    (line) => ({
+      transaction_type:
+        "Sale",
+
+      category:
+        "Sales Revenue",
+
+      reference:
+        order.order_number ||
+        `ORD-${order.id}`,
+
+      customer_name:
+        order.customer_name ||
+        "Walk-in Customer",
+
+      description:
+        `${line.product.name} sold to ${
+          order.customer_name ||
+          "Walk-in Customer"
+        }`,
+
+      amount:
+        line.lineTotal,
+
+      payment_method:
+        order.payment_status ===
+        "Paid"
+          ? "Cash"
+          : "Pending",
+
+      payment_status:
+        order.payment_status ===
+        "Paid"
+          ? "Completed"
+          : "Pending",
+
+      created_by:
+        typeof window !==
+        "undefined"
+          ? localStorage.getItem(
+              "full_name"
+            ) || "System"
+          : "System",
+    })
+  );
+
+    const {
+      error: financeError,
+    } = await supabase
+      .from("finance_transactions")
+      .insert(financeRows);
+
+    if (financeError) {
+      // --------------------------------------------------------
+      // ROLLBACK SALES IF FINANCE FAILS
+      // --------------------------------------------------------
+      //
+      // We don't want Sales to exist without Finance.
+      // --------------------------------------------------------
+
+      const invoiceNumbers =
+        salesRows.map(
+          (sale) =>
+            sale.invoice_number
+        );
+
+      const {
+        error: rollbackSalesError,
+      } = await supabase
+        .from("sales")
+        .delete()
+        .in(
+          "invoice_number",
+          invoiceNumbers
+        );
+
+      if (rollbackSalesError) {
+        console.error(
+          "Sales rollback failed:",
+          rollbackSalesError
+        );
+      }
+
+      throw new Error(
+        `Finance transaction failed: ${financeError.message}`
+      );
+    }
+
+    // ==========================================================
+    // 7. UPDATE PRODUCT STOCK
+    //
+    // Stock is only changed AFTER Sales + Finance succeed.
+    // ==========================================================
+
+    const updatedProducts: any[] = [];
+
+    for (const line of preparedItems) {
+      const newStock =
+        line.currentStock -
+        line.quantity;
+
+      const {
+        error: stockError,
+      } = await supabase
+        .from("products")
+        .update({
+          stock: newStock,
+        })
+        .eq(
+          "id",
+          line.product.id
+        );
+
+      if (stockError) {
+        console.error(
+          "Stock update failed:",
+          stockError
+        );
+
+        // Attempt to restore stock for products
+        // already updated in this operation.
+        for (const updated of updatedProducts) {
+          await supabase
+            .from("products")
+            .update({
+              stock:
+                updated.previousStock,
+            })
+            .eq(
+              "id",
+              updated.productId
+            );
+        }
+
+        // Remove the finance records created for
+        // this order.
+        await supabase
+          .from(
+            "finance_transactions"
+          )
+          .delete()
+          .eq(
+            "reference",
+            order.order_number ||
+              `ORD-${order.id}`
+          );
+
+        // Remove the sales records created for
+        // this order.
+        await supabase
+          .from("sales")
+          .delete()
+          .in(
+            "invoice_number",
+            salesRows.map(
+              (sale) =>
+                sale.invoice_number
+            )
+          );
+
+        throw new Error(
+          `Stock update failed for ${line.product.name}: ${stockError.message}`
+        );
+      }
+
+      updatedProducts.push({
+        productId:
+          line.product.id,
+
+        previousStock:
+          line.currentStock,
+      });
+    }
+
+    // ==========================================================
+    // 8. MARK ORDER COMPLETED
+    // ==========================================================
+
+    const {
+      error: completeError,
     } = await supabase
       .from("orders")
       .update({
         order_status:
           "Completed",
 
-        completed_at:
-          new Date().toISOString(),
+        status:
+          "Completed",
+
+        balance:
+          orderBalance,
       })
       .eq(
         "id",
         order.id
       );
 
-    if (orderError) {
-      showToast(
-        "error",
-        "Order Completion Failed",
-        orderError.message
+    if (completeError) {
+      // --------------------------------------------------------
+      // ROLLBACK STOCK
+      // --------------------------------------------------------
+
+      for (const updated of updatedProducts) {
+        await supabase
+          .from("products")
+          .update({
+            stock:
+              updated.previousStock,
+          })
+          .eq(
+            "id",
+            updated.productId
+          );
+      }
+
+      // --------------------------------------------------------
+      // ROLLBACK FINANCE
+      // --------------------------------------------------------
+
+      await supabase
+        .from(
+          "finance_transactions"
+        )
+        .delete()
+        .eq(
+          "reference",
+          order.order_number ||
+            `ORD-${order.id}`
+        );
+
+      // --------------------------------------------------------
+      // ROLLBACK SALES
+      // --------------------------------------------------------
+
+      await supabase
+        .from("sales")
+        .delete()
+        .in(
+          "invoice_number",
+          salesRows.map(
+            (sale) =>
+              sale.invoice_number
+          )
+        );
+
+      throw new Error(
+        `Could not complete order: ${completeError.message}`
       );
-      return;
     }
 
+    // ==========================================================
+    // 9. REFRESH ORDERS
+    // ==========================================================
+
     await fetchOrders();
+
+    // ==========================================================
+    // 10. SUCCESS
+    // ==========================================================
 
     showToast(
       "success",
       "Order Completed",
-      `Order ${order.order_number} has been completed successfully.`
+      `Order ${
+        order.order_number ||
+        order.id
+      } has been completed successfully.`
+    );
+  } catch (error: any) {
+    console.error(
+      "Complete order error:",
+      error
+    );
+
+    showToast(
+      "error",
+      "Order Completion Failed",
+      error?.message ||
+        "Something went wrong while completing this order."
     );
   }
+}
+
 
   // ============================================================
   // DELETE ORDER

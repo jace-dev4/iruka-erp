@@ -34,9 +34,16 @@ export default function FinancePage() {
   const [sales, setSales] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
 
-  const [reportPeriod, setReportPeriod] = useState("month");
+  const [reportPeriod, setReportPeriod] = useState("week");
 
   const [lastUpdated, setLastUpdated] = useState(new Date());
+
+  const PERIOD_OPTIONS = [
+  { key: "day", label: "Today" },
+  { key: "week", label: "This Week" },
+  { key: "month", label: "This Month" },
+  { key: "year", label: "This Year" },
+];
 
   // ===============================
   // EXPENSE FORM
@@ -107,6 +114,18 @@ export default function FinancePage() {
   useEffect(() => {
     fetchFinance();
   }, [reportPeriod]);
+
+  /* =========================
+   LIVE DATE & TIME
+========================= */
+
+useEffect(() => {
+  const timer = setInterval(() => {
+    setLastUpdated(new Date());
+  }, 1000);
+
+  return () => clearInterval(timer);
+}, []);
 
   // ===============================
   // SUPABASE REALTIME
@@ -256,124 +275,83 @@ export default function FinancePage() {
       // FILTER BY REPORTING PERIOD
       // ===============================
 
-      if (reportPeriod === "day") {
-        salesList = allSales.filter((sale) => {
-          const date = new Date(sale.created_at);
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
 
-          return (
-            date.getDate() === now.getDate() &&
-            date.getMonth() === now.getMonth() &&
-            date.getFullYear() === now.getFullYear()
-          );
-        });
+      const weekStart = new Date(now);
 
-        expenseList = allExpenses.filter(
-          (expense) => {
-            const date = new Date(
-              expense.created_at
-            );
+      const dayOfWeek = weekStart.getDay();
 
-            return (
-              date.getDate() === now.getDate() &&
-              date.getMonth() === now.getMonth() &&
-              date.getFullYear() ===
-                now.getFullYear()
-            );
-          }
-        );
+      const daysFromMonday =
+        dayOfWeek === 0 ? 6 : dayOfWeek - 1;
 
-        debtorPaymentList =
-          allDebtorPayments.filter(
-            (payment) => {
-              const date = new Date(
-                payment.payment_date
-              );
+      weekStart.setDate(
+        weekStart.getDate() - daysFromMonday
+      );
 
-              return (
-                date.getDate() === now.getDate() &&
-                date.getMonth() === now.getMonth() &&
-                date.getFullYear() ===
-                  now.getFullYear()
-              );
-            }
-          );
+      weekStart.setHours(0, 0, 0, 0);
+
+      const monthStart = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        1
+      );
+
+      monthStart.setHours(0, 0, 0, 0);
+
+      const yearStart = new Date(
+        now.getFullYear(),
+        0,
+        1
+      );
+
+      yearStart.setHours(0, 0, 0, 0);
+
+      let periodStart = todayStart;
+
+      if (reportPeriod === "week") {
+        periodStart = weekStart;
       } else if (reportPeriod === "month") {
-        salesList = allSales.filter((sale) => {
-          const date = new Date(sale.created_at);
-
-          return (
-            date.getMonth() === now.getMonth() &&
-            date.getFullYear() === now.getFullYear()
-          );
-        });
-
-        expenseList = allExpenses.filter(
-          (expense) => {
-            const date = new Date(
-              expense.created_at
-            );
-
-            return (
-              date.getMonth() === now.getMonth() &&
-              date.getFullYear() ===
-                now.getFullYear()
-            );
-          }
-        );
-
-        debtorPaymentList =
-          allDebtorPayments.filter(
-            (payment) => {
-              const date = new Date(
-                payment.payment_date
-              );
-
-              return (
-                date.getMonth() === now.getMonth() &&
-                date.getFullYear() ===
-                  now.getFullYear()
-              );
-            }
-          );
+        periodStart = monthStart;
       } else if (reportPeriod === "year") {
-        salesList = allSales.filter((sale) => {
-          const date = new Date(sale.created_at);
+        periodStart = yearStart;
+      }
+
+      salesList = allSales.filter((sale) => {
+        if (!sale.created_at) return false;
+
+        return (
+          new Date(sale.created_at) >= periodStart
+        );
+      });
+
+      expenseList = allExpenses.filter(
+        (expense) => {
+          if (!expense.created_at) return false;
 
           return (
-            date.getFullYear() === now.getFullYear()
+            new Date(expense.created_at) >=
+            periodStart
           );
-        });
+        }
+      );
 
-        expenseList = allExpenses.filter(
-          (expense) => {
-            const date = new Date(
-              expense.created_at
-            );
+      debtorPaymentList =
+        allDebtorPayments.filter(
+          (payment) => {
+            if (!payment.payment_date) return false;
 
             return (
-              date.getFullYear() ===
-              now.getFullYear()
+              new Date(payment.payment_date) >=
+              periodStart
             );
           }
         );
-
-        debtorPaymentList =
-          allDebtorPayments.filter(
-            (payment) => {
-              const date = new Date(
-                payment.payment_date
-              );
-
-              return (
-                date.getFullYear() ===
-                now.getFullYear()
-              );
-            }
-          );
-      }
 
       setSales(salesList);
       setExpenses(expenseList);
+
+
 
       // ==========================================================
       // ACCOUNTING LOGIC
@@ -858,6 +836,8 @@ async function addExpense() {
   const reportPeriodLabel =
     reportPeriod === "day"
       ? "Today"
+      : reportPeriod === "week"
+      ? "This Week"
       : reportPeriod === "month"
       ? "This Month"
       : "This Year";
@@ -1322,7 +1302,8 @@ async function addExpense() {
 
               </button>
 
-              {/* Reporting Period */}
+
+              {/* REPORTING PERIOD */}
 
               <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl px-6 py-5 min-w-[250px]">
 
@@ -1330,47 +1311,36 @@ async function addExpense() {
                   Reporting Period
                 </p>
 
-                <div className="relative">
+                <div className="bg-slate-900 border border-slate-700 rounded-2xl p-1.5 shadow-xl flex items-center">
 
-                  <CalendarDays
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-300"
-                    size={18}
-                  />
-
-                  <ChevronDown
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
-                    size={18}
-                  />
-
-                  <select
-                    value={reportPeriod}
-                    onChange={(e) =>
-                      setReportPeriod(
-                        e.target.value
-                      )
-                    }
-                    className="w-full appearance-none rounded-2xl border border-white/10 bg-[#132A4D] py-3 pl-12 pr-10 text-white font-semibold outline-none"
-                  >
-
-                    <option value="day">
-                      Today
-                    </option>
-
-                    <option value="month">
-                      This Month
-                    </option>
-
-                    <option value="year">
-                      This Year
-                    </option>
-
-                  </select>
+                  {PERIOD_OPTIONS.map(
+                    (option) => (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() =>
+                          setReportPeriod(
+                            option.key
+                          )
+                        }
+                        className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition ${
+                          reportPeriod ===
+                          option.key
+                            ? "bg-blue-600 text-white shadow-lg"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    )
+                  )}
 
                 </div>
 
               </div>
 
-              {/* Last Updated */}
+
+              {/* LAST UPDATED */}
 
               <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl px-7 py-5 min-w-[250px]">
 
@@ -1379,7 +1349,22 @@ async function addExpense() {
                 </p>
 
                 <p className="text-white text-xl font-bold mt-3">
-                  {lastUpdated.toLocaleString()}
+                  {lastUpdated.toLocaleDateString(
+                    "en-GB",
+                    {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    }
+                  )}{" "}
+                  {lastUpdated.toLocaleTimeString(
+                    "en-GB",
+                    {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    }
+                  )}
                 </p>
 
                 <p className="text-emerald-400 text-sm mt-2 font-medium">
@@ -1393,7 +1378,6 @@ async function addExpense() {
           </div>
 
         </div>
-
         {/* ==========================
             PREMIUM FINANCE KPI
         ========================== */}

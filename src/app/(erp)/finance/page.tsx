@@ -9,7 +9,13 @@ import {
   ChevronDown,
   RefreshCw,
   X,
+  Loader2,
+  Pencil,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
+
+import { Toaster, toast } from "sonner";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { supabase } from "@/lib/supabase";
@@ -71,6 +77,28 @@ export default function FinancePage() {
   // ===============================
 
   const [loading, setLoading] = useState(false);
+  const [expenseSubmitting, setExpenseSubmitting] = useState(false);
+
+    // ===============================
+  // EDIT / DELETE EXPENSE
+  // ===============================
+
+  const [editingExpense, setEditingExpense] = useState<any | null>(null);
+
+  const [showDeleteExpenseModal, setShowDeleteExpenseModal] =
+    useState(false);
+
+  const [expenseToDelete, setExpenseToDelete] =
+    useState<any | null>(null);
+
+  const [editExpenseTitle, setEditExpenseTitle] = useState("");
+  const [editExpenseAmount, setEditExpenseAmount] = useState("");
+  const [editExpenseCategory, setEditExpenseCategory] = useState("");
+  const [editExpenseDescription, setEditExpenseDescription] =
+    useState("");
+
+  const [expenseSaving, setExpenseSaving] = useState(false);
+  const [expenseDeleting, setExpenseDeleting] = useState(false);
 
   // ===============================
   // LOAD DATA
@@ -615,37 +643,50 @@ export default function FinancePage() {
     }
   }
 
-  // ===============================
-  // ADD EXPENSE
-  // ===============================
+// ===============================
+// ADD EXPENSE
+// ===============================
 
-  async function addExpense() {
-    if (
-      !title ||
-      !amount ||
-      !category
-    ) {
-      alert(
-        "Please fill in all required fields."
-      );
-      return;
-    }
+async function addExpense() {
+  if (expenseSubmitting) return;
 
-    const { error } =
-      await supabase
-        .from("expenses")
-        .insert([
-          {
-            title,
-            amount: Number(amount),
-            category,
-            description,
-          },
-        ]);
+  if (!title.trim()) {
+    toast.error("Expense title is required", {
+      description: "Please enter a title for this expense.",
+    });
+    return;
+  }
+
+  if (!amount || Number(amount) <= 0) {
+    toast.error("Invalid expense amount", {
+      description: "Please enter an amount greater than ₦0.",
+    });
+    return;
+  }
+
+  if (!category) {
+    toast.error("Expense category is required", {
+      description: "Please select a category before recording the expense.",
+    });
+    return;
+  }
+
+  setExpenseSubmitting(true);
+
+  try {
+    const { error } = await supabase
+      .from("expenses")
+      .insert([
+        {
+          title: title.trim(),
+          amount: Number(amount),
+          category,
+          description: description.trim(),
+        },
+      ]);
 
     if (error) {
-      alert(error.message);
-      return;
+      throw error;
     }
 
     setTitle("");
@@ -653,7 +694,161 @@ export default function FinancePage() {
     setCategory("");
     setDescription("");
 
+    toast.success("Expense recorded successfully", {
+      description: `${title.trim()} has been added to your financial records.`,
+    });
+
     await fetchFinance();
+  } catch (error: any) {
+    console.error("Add Expense Error:", error);
+
+    toast.error("Unable to record expense", {
+      description:
+        error?.message ||
+        "Something went wrong while saving the expense.",
+    });
+  } finally {
+    setExpenseSubmitting(false);
+  }
+}
+
+  // ===============================
+  // EDIT EXPENSE
+  // ===============================
+
+  function openEditExpense(expense: any) {
+    setEditingExpense(expense);
+
+    setEditExpenseTitle(expense.title || "");
+    setEditExpenseAmount(String(expense.amount || ""));
+    setEditExpenseCategory(expense.category || "");
+    setEditExpenseDescription(expense.description || "");
+  }
+
+  function closeEditExpense() {
+    if (expenseSaving) return;
+
+    setEditingExpense(null);
+    setEditExpenseTitle("");
+    setEditExpenseAmount("");
+    setEditExpenseCategory("");
+    setEditExpenseDescription("");
+  }
+
+  async function updateExpense() {
+    if (expenseSaving || !editingExpense) return;
+
+    if (!editExpenseTitle.trim()) {
+      toast.error("Expense title is required", {
+        description: "Please enter a title for this expense.",
+      });
+      return;
+    }
+
+    if (
+      !editExpenseAmount ||
+      Number(editExpenseAmount) <= 0
+    ) {
+      toast.error("Invalid expense amount", {
+        description: "Please enter an amount greater than ₦0.",
+      });
+      return;
+    }
+
+    if (!editExpenseCategory) {
+      toast.error("Expense category is required", {
+        description: "Please select an expense category.",
+      });
+      return;
+    }
+
+    setExpenseSaving(true);
+
+    try {
+      const { error } = await supabase
+        .from("expenses")
+        .update({
+          title: editExpenseTitle.trim(),
+          amount: Number(editExpenseAmount),
+          category: editExpenseCategory,
+          description: editExpenseDescription.trim(),
+        })
+        .eq("id", editingExpense.id);
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success("Expense updated successfully", {
+        description: `${editExpenseTitle.trim()} has been updated.`,
+      });
+
+      closeEditExpense();
+
+      await fetchFinance();
+    } catch (error: any) {
+      console.error("Update Expense Error:", error);
+
+      toast.error("Unable to update expense", {
+        description:
+          error?.message ||
+          "Something went wrong while updating the expense.",
+      });
+    } finally {
+      setExpenseSaving(false);
+    }
+  }
+
+  // ===============================
+  // DELETE EXPENSE
+  // ===============================
+
+  function openDeleteExpense(expense: any) {
+    setExpenseToDelete(expense);
+    setShowDeleteExpenseModal(true);
+  }
+
+  function closeDeleteExpense() {
+    if (expenseDeleting) return;
+
+    setExpenseToDelete(null);
+    setShowDeleteExpenseModal(false);
+  }
+
+  async function deleteExpense() {
+    if (expenseDeleting || !expenseToDelete) return;
+
+    setExpenseDeleting(true);
+
+    try {
+      const { error } = await supabase
+        .from("expenses")
+        .delete()
+        .eq("id", expenseToDelete.id);
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success("Expense deleted successfully", {
+        description: `"${expenseToDelete.title}" has been removed from your financial records.`,
+      });
+
+      setExpenseToDelete(null);
+      setShowDeleteExpenseModal(false);
+
+      await fetchFinance();
+    } catch (error: any) {
+      console.error("Delete Expense Error:", error);
+
+      toast.error("Unable to delete expense", {
+        description:
+          error?.message ||
+          "Something went wrong while deleting the expense.",
+      });
+    } finally {
+      setExpenseDeleting(false);
+    }
   }
 
   // ===============================
@@ -1032,6 +1227,21 @@ export default function FinancePage() {
         "accountant",
       ]}
     >
+      <Toaster
+  position="top-right"
+  expand={true}
+  richColors
+  closeButton
+  toastOptions={{
+    style: {
+      background: "#0D1728",
+      border: "1px solid rgba(255,255,255,0.12)",
+      color: "#ffffff",
+      borderRadius: "18px",
+      boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+    },
+  }}
+/>
       <div className="min-h-screen bg-slate-200 p-8">
 
         {/* ==========================
@@ -1540,12 +1750,43 @@ export default function FinancePage() {
 
             <div className="flex justify-end mt-10">
 
-              <button
-                onClick={addExpense}
-                className="rounded-2xl bg-gradient-to-r from-blue-700 to-blue-900 hover:from-blue-600 hover:to-blue-800 px-10 py-4 text-white font-bold shadow-xl transition-all duration-300"
-              >
-                + Record Expense
-              </button>
+<button
+  type="button"
+  onClick={addExpense}
+  disabled={expenseSubmitting}
+  className={`group relative inline-flex min-w-[220px] items-center justify-center gap-3 overflow-hidden rounded-2xl px-8 py-4 text-white font-bold shadow-2xl transition-all duration-300 ${
+    expenseSubmitting
+      ? "cursor-not-allowed bg-slate-700/80 opacity-80"
+      : "bg-gradient-to-r from-blue-700 via-blue-800 to-[#102A4D] hover:from-blue-600 hover:via-blue-700 hover:to-[#163B68] hover:-translate-y-0.5 hover:shadow-blue-900/40"
+  }`}
+>
+  {!expenseSubmitting && (
+    <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+  )}
+
+  {expenseSubmitting ? (
+    <>
+      <Loader2
+        size={20}
+        className="relative animate-spin"
+      />
+
+      <span className="relative">
+        Recording Expense...
+      </span>
+    </>
+  ) : (
+    <>
+      <span className="relative text-xl leading-none">
+        +
+      </span>
+
+      <span className="relative">
+        Record Expense
+      </span>
+    </>
+  )}
+</button>
 
             </div>
 
@@ -1875,188 +2116,228 @@ export default function FinancePage() {
             PREMIUM EXPENSE HISTORY
         ========================== */}
 
-        <div className="relative overflow-hidden rounded-[34px] bg-gradient-to-br from-[#071426] via-[#0C1D36] to-[#122C4B] border border-white/10 shadow-2xl">
+        <div className="relative overflow-hidden rounded-[34px] border border-white/10 bg-gradient-to-br from-[#071426] via-[#0C1D36] to-[#122C4B] shadow-2xl">
+          {/* Background glow effects */}
+          <div className="absolute -right-24 -top-20 h-80 w-80 rounded-full bg-blue-500/10 blur-3xl" />
+          <div className="absolute -bottom-20 -left-20 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
 
-          <div className="absolute -top-20 -right-24 w-80 h-80 rounded-full bg-blue-500/10 blur-3xl" />
-
-          <div className="absolute -bottom-20 -left-20 w-72 h-72 rounded-full bg-cyan-500/10 blur-3xl" />
-
-          <div className="relative p-10">
-
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-
+          <div className="relative p-6 md:p-10">
+            {/* Header */}
+            <div className="mb-8 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
               <div>
-
-                <span className="inline-flex px-4 py-1 rounded-full bg-red-500/20 border border-red-400/30 text-red-300 text-xs font-bold uppercase tracking-[0.25em]">
+                <span className="inline-flex rounded-full border border-red-400/30 bg-red-500/20 px-4 py-1 text-xs font-bold uppercase tracking-[0.25em] text-red-300">
                   Financial Records
                 </span>
 
-                <h2 className="text-4xl font-black text-white mt-4">
+                <h2 className="mt-4 text-3xl font-black text-white md:text-4xl">
                   Expense History
                 </h2>
 
-                <p className="text-slate-400 mt-3">
-                  View every recorded company expense with complete transaction history.
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400 md:text-base">
+                  View, manage, edit, and delete recorded company expenses.
+                  All changes are saved to your financial records.
                 </p>
-
               </div>
 
-              <div className="flex gap-5">
-
-                <div className="rounded-3xl bg-white/5 border border-white/10 px-6 py-4">
-
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                    Total Expenses
+              <div className="grid grid-cols-2 gap-3 sm:gap-5">
+                <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-4 sm:px-6">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 sm:text-xs">
+                    Expense Records
                   </p>
 
-                  <h3 className="text-3xl font-black text-red-400 mt-2">
-                    {expenses.length}
+                  <h3 className="mt-2 text-2xl font-black text-red-400 sm:text-3xl">
+                    {expenses.length.toLocaleString()}
                   </h3>
 
+                  <p className="mt-1 text-xs text-slate-500">
+                    Total transactions
+                  </p>
                 </div>
 
-                <div className="rounded-3xl bg-white/5 border border-white/10 px-6 py-4">
-
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-4 sm:px-6">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 sm:text-xs">
                     Total Value
                   </p>
 
-                  <h3 className="text-3xl font-black text-emerald-400 mt-2">
+                  <h3 className="mt-2 text-2xl font-black text-emerald-400 sm:text-3xl">
                     ₦
-                    {totalExpenses.toLocaleString()}
+                    {Number(totalExpenses || 0).toLocaleString("en-NG", {
+                      maximumFractionDigits: 2,
+                    })}
                   </h3>
 
+                  <p className="mt-1 text-xs text-slate-500">
+                    Recorded expenses
+                  </p>
                 </div>
-
               </div>
-
             </div>
 
+            {/* Expense table */}
             <div className="overflow-x-auto rounded-3xl border border-white/10">
-
-              <table className="w-full">
-
+              <table className="w-full min-w-[1050px]">
                 <thead>
-
                   <tr className="bg-[#132844]">
-
-                    <th className="text-left px-6 py-5 text-slate-300 uppercase tracking-[0.2em] text-xs">
+                    <th className="px-6 py-5 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-300">
                       Expense
                     </th>
 
-                    <th className="text-left px-6 py-5 text-slate-300 uppercase tracking-[0.2em] text-xs">
+                    <th className="px-6 py-5 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-300">
                       Category
                     </th>
 
-                    <th className="text-left px-6 py-5 text-slate-300 uppercase tracking-[0.2em] text-xs">
+                    <th className="px-6 py-5 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-300">
+                      Description
+                    </th>
+
+                    <th className="px-6 py-5 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-300">
                       Amount
                     </th>
 
-                    <th className="text-left px-6 py-5 text-slate-300 uppercase tracking-[0.2em] text-xs">
+                    <th className="px-6 py-5 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-300">
                       Date
                     </th>
 
+                    <th className="px-6 py-5 text-center text-xs font-bold uppercase tracking-[0.2em] text-slate-300">
+                      Actions
+                    </th>
                   </tr>
-
                 </thead>
 
                 <tbody>
-
                   {expenses.length === 0 ? (
-
                     <tr>
-
-                      <td
-                        colSpan={4}
-                        className="py-20 text-center"
-                      >
-
-                        <div className="flex flex-col items-center">
-
-                          <div className="text-7xl mb-5">
-                            📄
+                      <td colSpan={6} className="py-20 text-center">
+                        <div className="flex flex-col items-center px-6">
+                          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
+                            <span className="text-4xl">📄</span>
                           </div>
 
                           <h3 className="text-2xl font-bold text-white">
                             No Expense Records
                           </h3>
 
-                          <p className="text-slate-400 mt-3">
-                            Expense transactions will appear here after recording.
+                          <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
+                            Your expense transactions will appear here after
+                            you record your first expense.
                           </p>
-
                         </div>
-
                       </td>
-
                     </tr>
-
                   ) : (
-
                     expenses.map((expense) => (
-
                       <tr
                         key={expense.id}
-                        className="border-t border-white/5 hover:bg-white/5 transition"
+                        className="border-t border-white/5 transition-colors duration-200 hover:bg-white/[0.04]"
                       >
-
+                        {/* Expense name */}
                         <td className="px-6 py-5">
-
                           <div>
-
                             <p className="font-semibold text-white">
                               {expense.title}
                             </p>
 
-                            <p className="text-xs text-slate-500 mt-1">
+                            <p className="mt-1 text-xs text-slate-500">
                               Expense ID #{expense.id}
                             </p>
-
                           </div>
-
                         </td>
 
+                        {/* Category */}
                         <td className="px-6 py-5">
-
-                          <span className="inline-flex rounded-full bg-blue-500/20 border border-blue-400/30 px-4 py-2 text-sm text-blue-300">
-                            {expense.category}
+                          <span className="inline-flex whitespace-nowrap rounded-full border border-blue-400/30 bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-300">
+                            {expense.category || "Uncategorized"}
                           </span>
-
                         </td>
 
-                        <td className="px-6 py-5">
+                        {/* Description */}
+                        <td className="max-w-[260px] px-6 py-5">
+                          <p
+                            className="break-words text-sm leading-6 text-slate-400"
+                            title={expense.description || ""}
+                          >
+                            {expense.description?.trim() || "No description"}
+                          </p>
+                        </td>
 
-                          <span className="text-red-400 font-black text-lg">
+                        {/* Amount */}
+                        <td className="px-6 py-5">
+                          <span className="whitespace-nowrap text-lg font-black text-red-400">
                             ₦
-                            {Number(
-                              expense.amount || 0
-                            ).toLocaleString()}
+                            {Number(expense.amount || 0).toLocaleString(
+                              "en-NG",
+                              {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2,
+                              }
+                            )}
                           </span>
-
                         </td>
 
-                        <td className="px-6 py-5 text-slate-300">
-
-                          {new Date(
-                            expense.created_at
-                          ).toLocaleDateString()}
-
+                        {/* Date */}
+                        <td className="whitespace-nowrap px-6 py-5 text-sm text-slate-300">
+                          {expense.created_at
+                            ? new Date(
+                                expense.created_at
+                              ).toLocaleDateString("en-GB", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })
+                            : "—"}
                         </td>
 
+                        {/* Actions */}
+                        <td className="px-6 py-5">
+                          <div className="flex items-center justify-center gap-2">
+                            {/* Edit expense */}
+                            <button
+                              type="button"
+                              onClick={() => openEditExpense(expense)}
+                              title="Edit expense"
+                              aria-label={`Edit ${expense.title}`}
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-blue-400/20 bg-blue-500/10 text-blue-300 transition-all duration-200 hover:border-blue-400/50 hover:bg-blue-500/20 hover:text-blue-200"
+                            >
+                              <Pencil size={17} />
+                            </button>
+
+                            {/* Delete expense */}
+                            <button
+                              type="button"
+                              onClick={() => openDeleteExpense(expense)}
+                              title="Delete expense"
+                              aria-label={`Delete ${expense.title}`}
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-300 transition-all duration-200 hover:border-red-400/50 hover:bg-red-500/20 hover:text-red-200"
+                            >
+                              <Trash2 size={17} />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
-
                     ))
-
                   )}
-
                 </tbody>
-
               </table>
-
             </div>
 
-          </div>
+            {/* Footer */}
+            {expenses.length > 0 && (
+              <div className="mt-5 flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                <p>
+                  Showing{" "}
+                  <span className="font-semibold text-slate-300">
+                    {expenses.length.toLocaleString()}
+                  </span>{" "}
+                  expense record{expenses.length === 1 ? "" : "s"}.
+                </p>
 
+                <p className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  Changes are saved to your financial records.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ==========================
@@ -2088,6 +2369,325 @@ export default function FinancePage() {
               setShowCashFlow(false)
             }
           />
+        )}
+
+                {/* ==========================
+            EDIT EXPENSE MODAL
+        ========================== */}
+
+        {editingExpense && (
+
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+
+            <div className="relative w-full max-w-2xl overflow-hidden rounded-[30px] border border-white/10 bg-[#0D1728] shadow-2xl">
+
+              <div className="flex items-center justify-between border-b border-white/10 px-7 py-6">
+
+                <div>
+
+                  <span className="text-xs font-bold uppercase tracking-[0.25em] text-blue-400">
+                    Expense Management
+                  </span>
+
+                  <h2 className="mt-2 text-2xl font-black text-white">
+                    Edit Expense
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-400">
+                    Update the details of this financial record.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeEditExpense}
+                  disabled={expenseSaving}
+                  className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-400 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <X size={20} />
+                </button>
+
+              </div>
+
+              <div className="space-y-6 p-7">
+
+                {/* TITLE */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-semibold text-slate-300">
+                    Expense Title
+                  </label>
+
+                  <input
+                    type="text"
+                    value={editExpenseTitle}
+                    onChange={(e) =>
+                      setEditExpenseTitle(e.target.value)
+                    }
+                    placeholder="e.g. Diesel Purchase"
+                    className="w-full rounded-2xl border border-white/10 bg-[#162844] px-5 py-4 text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  />
+
+                </div>
+
+                {/* AMOUNT */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-semibold text-slate-300">
+                    Amount
+                  </label>
+
+                  <div className="relative">
+
+                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-bold text-slate-400">
+                      ₦
+                    </span>
+
+                    <input
+                      type="number"
+                      min="0"
+                      value={editExpenseAmount}
+                      onChange={(e) =>
+                        setEditExpenseAmount(e.target.value)
+                      }
+                      placeholder="0.00"
+                      className="w-full rounded-2xl border border-white/10 bg-[#162844] px-5 py-4 pl-10 text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* CATEGORY */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-semibold text-slate-300">
+                    Category
+                  </label>
+
+                  <select
+                    value={editExpenseCategory}
+                    onChange={(e) =>
+                      setEditExpenseCategory(e.target.value)
+                    }
+                    className="w-full rounded-2xl border border-white/10 bg-[#162844] px-5 py-4 text-white outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  >
+
+                    <option value="">
+                      Select Category
+                    </option>
+
+                    <option>Flour Purchase</option>
+                    <option>Material</option>
+                    <option>Transportation</option>
+                    <option>Fuel / Diesel</option>
+                    <option>Electricity</option>
+                    <option>Staff Salary</option>
+                    <option>Staff Welfare</option>
+                    <option>Maintenance</option>
+                    <option>Packaging</option>
+                    <option>Tax</option>
+                    <option>Office Expense</option>
+                    <option>Miscellaneous</option>
+
+                  </select>
+
+                </div>
+
+                {/* DESCRIPTION */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-semibold text-slate-300">
+                    Description
+                  </label>
+
+                  <textarea
+                    value={editExpenseDescription}
+                    onChange={(e) =>
+                      setEditExpenseDescription(e.target.value)
+                    }
+                    rows={4}
+                    placeholder="Add additional details about this expense..."
+                    className="w-full resize-none rounded-2xl border border-white/10 bg-[#162844] px-5 py-4 text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  />
+
+                </div>
+
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-white/10 bg-black/10 px-7 py-5">
+
+                <button
+                  type="button"
+                  onClick={closeEditExpense}
+                  disabled={expenseSaving}
+                  className="rounded-2xl border border-white/10 bg-white/5 px-6 py-3 font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={updateExpense}
+                  disabled={expenseSaving}
+                  className={`inline-flex min-w-[180px] items-center justify-center gap-2 rounded-2xl px-7 py-3 font-bold text-white shadow-xl transition-all duration-300 ${
+                    expenseSaving
+                      ? "cursor-not-allowed bg-slate-700 opacity-80"
+                      : "bg-gradient-to-r from-blue-700 via-blue-800 to-[#102A4D] hover:-translate-y-0.5 hover:from-blue-600 hover:via-blue-700 hover:to-[#163B68]"
+                  }`}
+                >
+
+                  {expenseSaving ? (
+
+                    <>
+                      <Loader2
+                        size={18}
+                        className="animate-spin"
+                      />
+
+                      Saving Changes...
+                    </>
+
+                  ) : (
+
+                    <>
+                      <Pencil size={18} />
+
+                      Save Changes
+                    </>
+
+                  )}
+
+                </button>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        )}
+
+                {/* ==========================
+            DELETE EXPENSE MODAL
+        ========================== */}
+
+        {showDeleteExpenseModal && expenseToDelete && (
+
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
+
+            <div className="relative w-full max-w-md overflow-hidden rounded-[30px] border border-red-400/20 bg-[#0D1728] shadow-2xl">
+
+              <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-red-500/10 blur-3xl" />
+
+              <div className="relative p-7">
+
+                <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-red-400/20 bg-red-500/10">
+
+                  <AlertTriangle
+                    size={30}
+                    className="text-red-400"
+                  />
+
+                </div>
+
+                <span className="text-xs font-bold uppercase tracking-[0.25em] text-red-400">
+                  Permanent Action
+                </span>
+
+                <h2 className="mt-2 text-2xl font-black text-white">
+                  Delete Expense?
+                </h2>
+
+                <p className="mt-3 leading-7 text-slate-400">
+                  You are about to permanently delete:
+                </p>
+
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+
+                  <p className="font-bold text-white">
+                    {expenseToDelete.title}
+                  </p>
+
+                  <p className="mt-1 text-sm text-slate-400">
+                    {expenseToDelete.category}
+                  </p>
+
+                  <p className="mt-3 text-xl font-black text-red-400">
+                    ₦
+                    {Number(
+                      expenseToDelete.amount || 0
+                    ).toLocaleString()}
+                  </p>
+
+                </div>
+
+                <div className="mt-4 rounded-xl border border-amber-400/10 bg-amber-400/5 px-4 py-3">
+
+                  <p className="text-sm leading-6 text-amber-300">
+                    This action cannot be undone. The expense will be removed from your financial records.
+                  </p>
+
+                </div>
+
+                <div className="mt-7 flex gap-3">
+
+                  <button
+                    type="button"
+                    onClick={closeDeleteExpense}
+                    disabled={expenseDeleting}
+                    className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-5 py-3.5 font-bold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={deleteExpense}
+                    disabled={expenseDeleting}
+                    className={`flex-1 inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3.5 font-bold text-white shadow-xl transition-all ${
+                      expenseDeleting
+                        ? "cursor-not-allowed bg-red-950/60 opacity-80"
+                        : "bg-gradient-to-r from-red-700 to-red-900 hover:-translate-y-0.5 hover:from-red-600 hover:to-red-800"
+                    }`}
+                  >
+
+                    {expenseDeleting ? (
+
+                      <>
+                        <Loader2
+                          size={18}
+                          className="animate-spin"
+                        />
+
+                        Deleting...
+                      </>
+
+                    ) : (
+
+                      <>
+                        <Trash2 size={18} />
+
+                        Delete Expense
+                      </>
+
+                    )}
+
+                  </button>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
         )}
 
       </div>

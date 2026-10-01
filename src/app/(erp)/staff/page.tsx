@@ -1323,35 +1323,54 @@ async function updateStaff() {
      FILTER STAFF
   ====================================================== */
 
-  const filteredStaff = useMemo(() => {
-    const search =
-      searchStaff
-        .trim()
-        .toLowerCase();
+const filteredStaff = useMemo(() => {
+  const search =
+    searchStaff
+      .trim()
+      .toLowerCase();
 
-    if (!search) {
-      return staff;
-    }
+  const filtered = search
+    ? staff.filter(
+        (member) =>
+          member.full_name
+            ?.toLowerCase()
+            .includes(search) ||
+          member.staff_id
+            ?.toLowerCase()
+            .includes(search) ||
+          member.phone_number
+            ?.toLowerCase()
+            .includes(search) ||
+          member.department
+            ?.toLowerCase()
+            .includes(search) ||
+          member.position
+            ?.toLowerCase()
+            .includes(search)
+      )
+    : staff;
 
-    return staff.filter(
-      (member) =>
-        member.full_name
-          ?.toLowerCase()
-          .includes(search) ||
-        member.staff_id
-          ?.toLowerCase()
-          .includes(search) ||
-        member.phone_number
-          ?.toLowerCase()
-          .includes(search) ||
-        member.department
-          ?.toLowerCase()
-          .includes(search) ||
-        member.position
-          ?.toLowerCase()
-          .includes(search)
+  /*
+    ALWAYS SORT STAFF DIRECTORY
+    A → Z BY FULL NAME
+  */
+  return [...filtered].sort((a, b) => {
+    const nameA =
+      String(a.full_name || "").trim();
+
+    const nameB =
+      String(b.full_name || "").trim();
+
+    return nameA.localeCompare(
+      nameB,
+      undefined,
+      {
+        sensitivity: "base",
+        numeric: true,
+      }
     );
-  }, [staff, searchStaff]);
+  });
+}, [staff, searchStaff]);
 
   const displayedStaff =
     searchStaff.trim()

@@ -24,6 +24,7 @@ import {
 
 interface Staff {
   id: number;
+  staff_id: string;
   full_name: string;
   department: string;
   position: string;
@@ -33,6 +34,7 @@ interface Staff {
   account_number: string;
   employment_status: string;
   date_joined: string;
+  photo_url: string | null;
 }
 
 interface Debt {
@@ -214,18 +216,20 @@ export default function PayrollPage() {
       ] = await Promise.all([
         supabase
           .from("staff")
-          .select(`
-            id,
-            full_name,
-            department,
-            position,
-            salary,
-            bank_name,
-            account_name,
-            account_number,
-            employment_status,
-            date_joined
-          `)
+.select(`
+  id,
+  staff_id,
+  full_name,
+  department,
+  position,
+  salary,
+  bank_name,
+  account_name,
+  account_number,
+  employment_status,
+  date_joined,
+  photo_url
+`)
           .eq("employment_status", "Active")
           .order("full_name"),
 
@@ -301,6 +305,30 @@ export default function PayrollPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+    /* =====================================================
+     STAFF LOOKUP
+
+     Connect payroll staff_id to the real staff record.
+
+     payroll.staff_id = staff.id
+     staff.staff_id   = visible Staff ID
+     staff.photo_url  = employee photo
+  ===================================================== */
+
+  const staffByDatabaseId =
+    useMemo(() => {
+      const lookup: Record<
+        number,
+        Staff
+      > = {};
+
+      staff.forEach((member) => {
+        lookup[member.id] = member;
+      });
+
+      return lookup;
+    }, [staff]);
 
   /* =====================================================
      STAFF DEBT DEDUCTION
@@ -433,20 +461,41 @@ export default function PayrollPage() {
      selected month/year.
   ===================================================== */
 
-  const selectedMonthPayroll =
-    useMemo(() => {
-      return payroll.filter(
-        (item) =>
-          item.payroll_month ===
-            selectedPayrollMonth &&
-          Number(item.payroll_year) ===
-            Number(selectedPayrollYear)
+const selectedMonthPayroll =
+  useMemo(() => {
+    const filtered = payroll.filter(
+      (item) =>
+        item.payroll_month ===
+          selectedPayrollMonth &&
+        Number(item.payroll_year) ===
+          Number(selectedPayrollYear)
+    );
+
+    /*
+      ALWAYS SORT PAYROLL
+      A → Z BY STAFF NAME
+    */
+    return [...filtered].sort((a, b) => {
+      const nameA =
+        String(a.staff_name || "").trim();
+
+      const nameB =
+        String(b.staff_name || "").trim();
+
+      return nameA.localeCompare(
+        nameB,
+        undefined,
+        {
+          sensitivity: "base",
+          numeric: true,
+        }
       );
-    }, [
-      payroll,
-      selectedPayrollMonth,
-      selectedPayrollYear,
-    ]);
+    });
+  }, [
+    payroll,
+    selectedPayrollMonth,
+    selectedPayrollYear,
+  ]);
 
   /* =====================================================
      CHECK WHETHER SELECTED PAYROLL EXISTS
@@ -1877,7 +1926,7 @@ export default function PayrollPage() {
                 <tr className="bg-slate-900 text-white">
 
                   <th className="px-6 py-5 text-left">
-                    Staff ID
+                    Photo
                   </th>
 
                   <th className="px-6 py-5 text-left">
@@ -1960,9 +2009,29 @@ export default function PayrollPage() {
                         className="border-b hover:bg-slate-50"
                       >
 
-                        <td className="px-6 py-5 font-bold text-blue-700">
-                          {item.staff_id}
-                        </td>
+<td className="px-6 py-5">
+
+  <div className="h-12 w-12 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center border-2 border-slate-200">
+
+    {staffByDatabaseId[item.staff_id]?.photo_url ? (
+      <img
+        src={
+          staffByDatabaseId[
+            item.staff_id
+          ]?.photo_url || ""
+        }
+        alt={item.staff_name}
+        className="h-full w-full object-cover"
+      />
+    ) : (
+      <span className="text-xl">
+        👤
+      </span>
+    )}
+
+  </div>
+
+</td>
 
                         <td className="px-6 py-5">
 

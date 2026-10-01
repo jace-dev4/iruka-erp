@@ -1,4 +1,3 @@
-
 "use client";
 
 import jsPDF from "jspdf";
@@ -16,6 +15,7 @@ import {
   Download,
   CalendarDays,
   FileSpreadsheet,
+  ChevronDown,
 } from "lucide-react";
 
 /* =====================================================
@@ -81,6 +81,25 @@ function getMonthName(monthIndex: number) {
   });
 }
 
+function getMonthIndex(monthName: string) {
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  return months.indexOf(monthName);
+}
+
 /* =====================================================
    PAGE
 ===================================================== */
@@ -90,6 +109,8 @@ export default function PayrollPage() {
      STATE
   ===================================================== */
 
+  const now = new Date();
+
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
@@ -97,43 +118,84 @@ export default function PayrollPage() {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [payroll, setPayroll] = useState<Payroll[]>([]);
 
-  const [selectedPayroll, setSelectedPayroll] = useState<Payroll[]>([]);
-  const [showPayrollModal, setShowPayrollModal] = useState(false);
+  const [selectedPayroll, setSelectedPayroll] =
+    useState<Payroll[]>([]);
+
+  const [showPayrollModal, setShowPayrollModal] =
+    useState(false);
 
   const [search, setSearch] = useState("");
 
-  const today = new Date();
-
-  /*
-    Payroll always belongs to the CURRENT calendar month.
-
-    Example:
-    August 1 - August 31 = August payroll
-    September 1 - September 30 = September payroll
-  */
-
-  const payrollMonth = getMonthName(today.getMonth());
-  const payrollYear = today.getFullYear();
-
   /* =====================================================
-     CURRENT MONTH DATE INFORMATION
+     SELECTED PAYROLL PERIOD
+
+     Default = current month/year.
+
+     The user can change this at ANY TIME.
   ===================================================== */
 
+  const [selectedPayrollMonth, setSelectedPayrollMonth] =
+    useState(getMonthName(now.getMonth()));
+
+  const [selectedPayrollYear, setSelectedPayrollYear] =
+    useState(now.getFullYear());
+
+  /* =====================================================
+     MONTHS
+  ===================================================== */
+
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  /* =====================================================
+     YEARS
+
+     Allows previous years and future years.
+
+     Adjust range later if needed.
+  ===================================================== */
+
+  const currentYear = now.getFullYear();
+
+  const years = Array.from(
+    { length: 11 },
+    (_, index) => currentYear - 5 + index
+  );
+
+  /* =====================================================
+     SELECTED MONTH INFORMATION
+  ===================================================== */
+
+  const selectedMonthIndex =
+    getMonthIndex(selectedPayrollMonth);
+
   const daysInMonth = new Date(
-    payrollYear,
-    today.getMonth() + 1,
+    selectedPayrollYear,
+    selectedMonthIndex + 1,
     0
   ).getDate();
 
   const monthStart = new Date(
-    payrollYear,
-    today.getMonth(),
+    selectedPayrollYear,
+    selectedMonthIndex,
     1
   );
 
   const monthEnd = new Date(
-    payrollYear,
-    today.getMonth(),
+    selectedPayrollYear,
+    selectedMonthIndex,
     daysInMonth
   );
 
@@ -181,28 +243,52 @@ export default function PayrollPage() {
       ]);
 
       if (staffResponse.error) {
-        console.error("Staff Fetch Error:", staffResponse.error);
+        console.error(
+          "Staff Fetch Error:",
+          staffResponse.error
+        );
+
         alert(staffResponse.error.message);
         return;
       }
 
       if (debtResponse.error) {
-        console.error("Debt Fetch Error:", debtResponse.error);
+        console.error(
+          "Debt Fetch Error:",
+          debtResponse.error
+        );
+
         alert(debtResponse.error.message);
         return;
       }
 
       if (payrollResponse.error) {
-        console.error("Payroll Fetch Error:", payrollResponse.error);
+        console.error(
+          "Payroll Fetch Error:",
+          payrollResponse.error
+        );
+
         alert(payrollResponse.error.message);
         return;
       }
 
-      setStaff(staffResponse.data || []);
-      setDebts(debtResponse.data || []);
-      setPayroll(payrollResponse.data || []);
+      setStaff(
+        (staffResponse.data || []) as Staff[]
+      );
+
+      setDebts(
+        (debtResponse.data || []) as Debt[]
+      );
+
+      setPayroll(
+        (payrollResponse.data || []) as Payroll[]
+      );
     } catch (error: any) {
-      console.error("Payroll Fetch Error:", error);
+      console.error(
+        "Payroll Fetch Error:",
+        error
+      );
+
       alert(
         error?.message ||
           "Unable to load payroll information."
@@ -219,11 +305,10 @@ export default function PayrollPage() {
   /* =====================================================
      STAFF DEBT DEDUCTION
 
-     Only OPEN debts belonging to the current payroll
-     month/year are deducted.
+     IMPORTANT:
 
-     Example:
-     August debt -> August payroll deduction.
+     Debt is matched against the SELECTED payroll
+     month/year, not today's month/year.
   ===================================================== */
 
   function getDeduction(staffName: string) {
@@ -231,8 +316,9 @@ export default function PayrollPage() {
       .filter(
         (item) =>
           item.staff_name === staffName &&
-          item.month === payrollMonth &&
-          Number(item.year) === payrollYear &&
+          item.month === selectedPayrollMonth &&
+          Number(item.year) ===
+            Number(selectedPayrollYear) &&
           item.status === "Open"
       )
       .reduce(
@@ -245,75 +331,72 @@ export default function PayrollPage() {
   /* =====================================================
      CALCULATE DAYS WORKED
 
-     Payroll period:
+     Uses the SELECTED payroll month.
 
-     1st day of month
-          ↓
-     last day of month
+     Example:
 
-     If staff joined before the month:
-       full month
+     Selected month = October 2026
 
-     If staff joined during the month:
-       joining date → month end
+     Joined:
+     Before October 1
+       → 31 days
 
-     If staff joins in future:
-       0 days
+     Joined October 10
+       → 22 days
+
+     Joined after October 31
+       → 0 days
   ===================================================== */
 
-  function calculateDaysWorked(dateJoined: string) {
+  function calculateDaysWorked(
+    dateJoined: string
+  ) {
     if (!dateJoined) {
       return daysInMonth;
     }
 
     const joinedDate = new Date(dateJoined);
 
-    /*
-      Normalize time to prevent timezone problems.
-    */
+    joinedDate.setHours(
+      0,
+      0,
+      0,
+      0
+    );
 
-    joinedDate.setHours(0, 0, 0, 0);
-
-    /*
-      Staff joined before this payroll month.
-    */
-
-    if (joinedDate < monthStart) {
+    if (
+      joinedDate < monthStart
+    ) {
       return daysInMonth;
     }
 
-    /*
-      Staff joins after this payroll month.
-    */
-
-    if (joinedDate > monthEnd) {
+    if (
+      joinedDate > monthEnd
+    ) {
       return 0;
     }
 
-    /*
-      Staff joined during this month.
-
-      Example:
-      August has 31 days.
-      Joined August 10.
-
-      Days worked:
-      31 - 10 + 1 = 22 days
-    */
-
-    return daysInMonth - joinedDate.getDate() + 1;
+    return (
+      daysInMonth -
+      joinedDate.getDate() +
+      1
+    );
   }
 
   /* =====================================================
      CALCULATE PAYROLL FOR STAFF
   ===================================================== */
 
-  function calculatePayrollForStaff(employee: Staff) {
-    const basicSalary = Number(employee.salary || 0);
+  function calculatePayrollForStaff(
+    employee: Staff
+  ) {
+    const basicSalary =
+      Number(employee.salary || 0);
 
-    const daysWorked = calculateDaysWorked(
-      employee.date_joined
-    );
+    const daysWorked =
+      calculateDaysWorked(
+        employee.date_joined
+      );
 
     const dailySalary =
       daysInMonth > 0
@@ -323,18 +406,17 @@ export default function PayrollPage() {
     const salaryEarned =
       dailySalary * daysWorked;
 
-    const deduction = getDeduction(
-      employee.full_name
-    );
+    const deduction =
+      getDeduction(
+        employee.full_name
+      );
 
-    /*
-      Never allow negative salary payable.
-    */
-
-    const balancePayable = Math.max(
-      salaryEarned - deduction,
-      0
-    );
+    const balancePayable =
+      Math.max(
+        salaryEarned -
+          deduction,
+        0
+      );
 
     return {
       daysWorked,
@@ -345,57 +427,71 @@ export default function PayrollPage() {
   }
 
   /* =====================================================
-     CHECK WHETHER CURRENT MONTH PAYROLL EXISTS
+     SELECTED MONTH PAYROLL
+
+     Everything on the main page now follows the
+     selected month/year.
   ===================================================== */
 
-  const currentMonthPayroll = useMemo(() => {
-    return payroll.filter(
-      (item) =>
-        item.payroll_month === payrollMonth &&
-        Number(item.payroll_year) === payrollYear
-    );
-  }, [payroll, payrollMonth, payrollYear]);
+  const selectedMonthPayroll =
+    useMemo(() => {
+      return payroll.filter(
+        (item) =>
+          item.payroll_month ===
+            selectedPayrollMonth &&
+          Number(item.payroll_year) ===
+            Number(selectedPayrollYear)
+      );
+    }, [
+      payroll,
+      selectedPayrollMonth,
+      selectedPayrollYear,
+    ]);
+
+  /* =====================================================
+     CHECK WHETHER SELECTED PAYROLL EXISTS
+  ===================================================== */
 
   const payrollAlreadyGenerated =
-    currentMonthPayroll.length > 0;
+    selectedMonthPayroll.length > 0;
 
   /* =====================================================
      GENERATE PAYROLL
 
      IMPORTANT:
 
-     This can be clicked any time during the month.
+     Payroll can now be generated ANY TIME.
 
-     The payroll period is ALWAYS:
+     There is NO month-end restriction.
 
-     1st → last day of current month.
-
-     Once generated, it cannot be generated again
-     for the same month.
+     The selected month/year determines the payroll
+     period.
   ===================================================== */
 
   async function generatePayroll() {
     if (generating) return;
 
-    /*
-      Prevent duplicate generation.
-    */
+    /* -----------------------------------------------
+       Prevent duplicate payroll
+    ------------------------------------------------ */
 
     if (payrollAlreadyGenerated) {
       alert(
-        `Payroll for ${payrollMonth} ${payrollYear} has already been generated.`
+        `Payroll for ${selectedPayrollMonth} ${selectedPayrollYear} has already been generated.`
       );
+
       return;
     }
 
-    /*
-      Make sure there are employees.
-    */
+    /* -----------------------------------------------
+       Make sure there are active staff
+    ------------------------------------------------ */
 
     if (staff.length === 0) {
       alert(
         "There are no active staff members available for payroll."
       );
+
       return;
     }
 
@@ -408,31 +504,25 @@ export default function PayrollPage() {
       let totalDeductions = 0;
       let netPayroll = 0;
 
+      /* ---------------------------------------------
+         Calculate every employee
+      ---------------------------------------------- */
+
       for (const employee of staff) {
-        /*
-          Calculate this employee's payroll.
-        */
-
         const calculation =
-          calculatePayrollForStaff(employee);
+          calculatePayrollForStaff(
+            employee
+          );
 
         /*
-          Future employees should not enter payroll.
+          Staff who had not joined yet are excluded.
         */
 
-        if (calculation.daysWorked <= 0) {
+        if (
+          calculation.daysWorked <= 0
+        ) {
           continue;
         }
-
-        /*
-          Bank details are not used to determine whether
-          salary is earned.
-
-          We therefore DO NOT skip staff just because
-          their bank information is incomplete.
-
-          Their payroll still needs to be recorded.
-        */
 
         grossPayroll +=
           calculation.salaryEarned;
@@ -444,27 +534,36 @@ export default function PayrollPage() {
           calculation.balancePayable;
 
         payrollRows.push({
-          staff_id: employee.id,
+          staff_id:
+            employee.id,
 
-          staff_name: employee.full_name,
+          staff_name:
+            employee.full_name,
 
           department:
-            employee.department || "",
+            employee.department ||
+            "",
 
           position:
-            employee.position || "",
+            employee.position ||
+            "",
 
           bank_name:
-            employee.bank_name || "",
+            employee.bank_name ||
+            "",
 
           account_name:
-            employee.account_name || "",
+            employee.account_name ||
+            "",
 
           account_number:
-            employee.account_number || "",
+            employee.account_number ||
+            "",
 
           basic_salary:
-            Number(employee.salary || 0),
+            Number(
+              employee.salary || 0
+            ),
 
           days_worked:
             calculation.daysWorked,
@@ -479,31 +578,88 @@ export default function PayrollPage() {
             calculation.balancePayable,
 
           payroll_month:
-            payrollMonth,
+            selectedPayrollMonth,
 
           payroll_year:
-            payrollYear,
+            selectedPayrollYear,
 
           payment_status:
             "Ready",
         });
       }
 
-      if (payrollRows.length === 0) {
+      /* ---------------------------------------------
+         Make sure there are eligible employees
+      ---------------------------------------------- */
+
+      if (
+        payrollRows.length === 0
+      ) {
         alert(
-          "No eligible staff members were found for this payroll period."
+          `No eligible staff members were found for ${selectedPayrollMonth} ${selectedPayrollYear}.`
         );
+
         return;
       }
 
-      /*
-        Insert payroll records.
-      */
+      /* ---------------------------------------------
+         FINAL DUPLICATE CHECK
 
-      const { error: payrollError } =
-        await supabase
-          .from("payroll")
-          .insert(payrollRows);
+         This protects against another payroll being
+         created after the page was loaded.
+      ---------------------------------------------- */
+
+      const {
+        data: existingPayroll,
+        error: existingPayrollError,
+      } = await supabase
+        .from("payroll")
+        .select("id")
+        .eq(
+          "payroll_month",
+          selectedPayrollMonth
+        )
+        .eq(
+          "payroll_year",
+          selectedPayrollYear
+        )
+        .limit(1);
+
+      if (existingPayrollError) {
+        console.error(
+          "Duplicate Payroll Check Error:",
+          existingPayrollError
+        );
+
+        alert(
+          existingPayrollError.message
+        );
+
+        return;
+      }
+
+      if (
+        existingPayroll &&
+        existingPayroll.length > 0
+      ) {
+        alert(
+          `Payroll for ${selectedPayrollMonth} ${selectedPayrollYear} already exists.`
+        );
+
+        await fetchData();
+
+        return;
+      }
+
+      /* ---------------------------------------------
+         INSERT PAYROLL
+      ---------------------------------------------- */
+
+      const {
+        error: payrollError,
+      } = await supabase
+        .from("payroll")
+        .insert(payrollRows);
 
       if (payrollError) {
         console.error(
@@ -511,20 +667,19 @@ export default function PayrollPage() {
           payrollError
         );
 
-        alert(payrollError.message);
+        alert(
+          payrollError.message
+        );
+
         return;
       }
 
-      /*
-        IMPORTANT:
-
-        We intentionally DO NOT insert into
-        payroll_history because that table does not
-        currently exist in your Supabase database.
-      */
+      /* ---------------------------------------------
+         SUCCESS
+      ---------------------------------------------- */
 
       alert(
-        `${payrollMonth} ${payrollYear} payroll generated successfully.\n\n` +
+        `${selectedPayrollMonth} ${selectedPayrollYear} payroll generated successfully.\n\n` +
           `Employees: ${payrollRows.length}\n` +
           `Gross Payroll: ${money(grossPayroll)}\n` +
           `Deductions: ${money(totalDeductions)}\n` +
@@ -549,29 +704,29 @@ export default function PayrollPage() {
 
   /* =====================================================
      PAY SALARY
-
-     This ONLY marks the payroll as Paid.
-
-     It does NOT change the employee's salary.
-
-     It also does NOT automatically mark a staff debt
-     as paid because payroll deductions and debt
-     settlement are separate accounting events.
   ===================================================== */
 
-  async function paySalary(id: number) {
-    const confirmed = window.confirm(
-      "Confirm that this salary has actually been paid?"
-    );
+  async function paySalary(
+    id: number
+  ) {
+    const confirmed =
+      window.confirm(
+        "Confirm that this salary has actually been paid?"
+      );
 
     if (!confirmed) return;
 
-    const { error } = await supabase
-      .from("payroll")
-      .update({
-        payment_status: "Paid",
-      })
-      .eq("id", id);
+    const { error } =
+      await supabase
+        .from("payroll")
+        .update({
+          payment_status:
+            "Paid",
+        })
+        .eq(
+          "id",
+          id
+        );
 
     if (error) {
       console.error(
@@ -579,13 +734,18 @@ export default function PayrollPage() {
         error
       );
 
-      alert(error.message);
+      alert(
+        error.message
+      );
+
       return;
     }
 
     await fetchData();
 
-    alert("Salary marked as paid successfully.");
+    alert(
+      "Salary marked as paid successfully."
+    );
   }
 
   /* =====================================================
@@ -596,12 +756,23 @@ export default function PayrollPage() {
     month: string,
     year: number
   ) {
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from("payroll")
       .select("*")
-      .eq("payroll_month", month)
-      .eq("payroll_year", year)
-      .order("staff_name");
+      .eq(
+        "payroll_month",
+        month
+      )
+      .eq(
+        "payroll_year",
+        year
+      )
+      .order(
+        "staff_name"
+      );
 
     if (error) {
       console.error(
@@ -609,104 +780,193 @@ export default function PayrollPage() {
         error
       );
 
-      alert(error.message);
+      alert(
+        error.message
+      );
+
       return;
     }
 
-    setSelectedPayroll(data || []);
-    setShowPayrollModal(true);
+    setSelectedPayroll(
+      (data || []) as Payroll[]
+    );
+
+    setShowPayrollModal(
+      true
+    );
   }
 
   /* =====================================================
      SUMMARY
-
-     Current month only.
   ===================================================== */
 
-  const grossPayroll = useMemo(() => {
-    return currentMonthPayroll.reduce(
-      (sum, item) =>
-        sum + Number(item.salary_earned || 0),
-      0
-    );
-  }, [currentMonthPayroll]);
-
-  const totalDeductions = useMemo(() => {
-    return currentMonthPayroll.reduce(
-      (sum, item) =>
-        sum + Number(item.total_deduction || 0),
-      0
-    );
-  }, [currentMonthPayroll]);
-
-  const netPayroll = useMemo(() => {
-    return currentMonthPayroll.reduce(
-      (sum, item) =>
-        sum + Number(item.balance_payable || 0),
-      0
-    );
-  }, [currentMonthPayroll]);
-
-  const paidPayroll = useMemo(() => {
-    return currentMonthPayroll
-      .filter(
-        (item) =>
-          item.payment_status === "Paid"
-      )
-      .reduce(
+  const grossPayroll =
+    useMemo(() => {
+      return selectedMonthPayroll.reduce(
         (sum, item) =>
           sum +
-          Number(item.balance_payable || 0),
+          Number(
+            item.salary_earned || 0
+          ),
         0
       );
-  }, [currentMonthPayroll]);
+    }, [
+      selectedMonthPayroll,
+    ]);
 
-  const outstandingPayroll = Math.max(
-    netPayroll - paidPayroll,
-    0
-  );
+  const totalDeductions =
+    useMemo(() => {
+      return selectedMonthPayroll.reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.total_deduction ||
+              0
+          ),
+        0
+      );
+    }, [
+      selectedMonthPayroll,
+    ]);
+
+  const netPayroll =
+    useMemo(() => {
+      return selectedMonthPayroll.reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.balance_payable ||
+              0
+          ),
+        0
+      );
+    }, [
+      selectedMonthPayroll,
+    ]);
+
+  const paidPayroll =
+    useMemo(() => {
+      return selectedMonthPayroll
+        .filter(
+          (item) =>
+            item.payment_status ===
+            "Paid"
+        )
+        .reduce(
+          (sum, item) =>
+            sum +
+            Number(
+              item.balance_payable ||
+                0
+            ),
+          0
+        );
+    }, [
+      selectedMonthPayroll,
+    ]);
+
+  const outstandingPayroll =
+    Math.max(
+      netPayroll -
+        paidPayroll,
+      0
+    );
 
   /* =====================================================
      SEARCH
   ===================================================== */
 
-  const filteredPayroll = useMemo(() => {
-    return currentMonthPayroll.filter(
-      (item) =>
-        item.staff_name
-          .toLowerCase()
-          .includes(search.toLowerCase()) ||
-        String(item.staff_id)
-          .toLowerCase()
-          .includes(search.toLowerCase()) ||
-        (item.department || "")
-          .toLowerCase()
-          .includes(search.toLowerCase())
+  const filteredPayroll =
+    useMemo(() => {
+      const searchValue =
+        search
+          .trim()
+          .toLowerCase();
+
+      if (!searchValue) {
+        return selectedMonthPayroll;
+      }
+
+      return selectedMonthPayroll.filter(
+        (item) =>
+          item.staff_name
+            .toLowerCase()
+            .includes(
+              searchValue
+            ) ||
+          String(
+            item.staff_id
+          )
+            .toLowerCase()
+            .includes(
+              searchValue
+            ) ||
+          (
+            item.department ||
+            ""
+          )
+            .toLowerCase()
+            .includes(
+              searchValue
+            )
+      );
+    }, [
+      selectedMonthPayroll,
+      search,
+    ]);
+
+  /* =====================================================
+     CHANGE PAYROLL PERIOD
+  ===================================================== */
+
+  function changePayrollMonth(
+    month: string
+  ) {
+    setSelectedPayrollMonth(
+      month
     );
-  }, [
-    currentMonthPayroll,
-    search,
-  ]);
+
+    setSearch("");
+  }
+
+  function changePayrollYear(
+    year: number
+  ) {
+    setSelectedPayrollYear(
+      year
+    );
+
+    setSearch("");
+  }
 
   /* =====================================================
      DOWNLOAD PAYROLL
   ===================================================== */
 
   function downloadPayroll() {
-    if (currentMonthPayroll.length === 0) {
+    if (
+      selectedMonthPayroll.length ===
+      0
+    ) {
       alert(
-        "Generate this month's payroll before downloading."
+        `There is no payroll generated for ${selectedPayrollMonth} ${selectedPayrollYear}.`
       );
+
       return;
     }
 
-    const doc = new jsPDF();
+    const doc =
+      new jsPDF();
 
-    /*
-      Header
-    */
+    /* -----------------------------------------------
+       HEADER
+    ------------------------------------------------ */
 
-    doc.setFillColor(15, 23, 42);
+    doc.setFillColor(
+      15,
+      23,
+      42
+    );
 
     doc.rect(
       0,
@@ -727,34 +987,46 @@ export default function PayrollPage() {
       "bold"
     );
 
-    doc.setFontSize(22);
+    doc.setFontSize(
+      22
+    );
 
     doc.text(
       "IRUKA INDUSTRIES LTD",
       105,
       16,
       {
-        align: "center",
+        align:
+          "center",
       }
     );
 
-    doc.setFontSize(13);
+    doc.setFontSize(
+      13
+    );
 
     doc.text(
       "MONTHLY PAYROLL REPORT",
       105,
       25,
       {
-        align: "center",
+        align:
+          "center",
       }
     );
 
-    doc.setTextColor(0, 0, 0);
+    doc.setTextColor(
+      0,
+      0,
+      0
+    );
 
-    doc.setFontSize(11);
+    doc.setFontSize(
+      11
+    );
 
     doc.text(
-      `Payroll Period: 1 - ${daysInMonth} ${payrollMonth} ${payrollYear}`,
+      `Payroll Period: 1 - ${daysInMonth} ${selectedPayrollMonth} ${selectedPayrollYear}`,
       14,
       45
     );
@@ -765,106 +1037,133 @@ export default function PayrollPage() {
       45
     );
 
-    autoTable(doc, {
-      startY: 55,
+    /* -----------------------------------------------
+       TABLE
+    ------------------------------------------------ */
 
-      theme: "grid",
+    autoTable(
+      doc,
+      {
+        startY:
+          55,
 
-      headStyles: {
-        fillColor: [
-          15,
-          23,
-          42,
-        ],
+        theme:
+          "grid",
 
-        textColor: [
-          255,
-          255,
-          255,
-        ],
+        headStyles:
+          {
+            fillColor:
+              [
+                15,
+                23,
+                42,
+              ],
 
-        fontStyle: "bold",
+            textColor:
+              [
+                255,
+                255,
+                255,
+              ],
 
-        halign: "center",
-      },
+            fontStyle:
+              "bold",
 
-      alternateRowStyles: {
-        fillColor: [
-          245,
-          247,
-          250,
-        ],
-      },
+            halign:
+              "center",
+          },
 
-      styles: {
-        fontSize: 8,
-        cellPadding: 3,
-        valign: "middle",
-      },
+        alternateRowStyles:
+          {
+            fillColor:
+              [
+                245,
+                247,
+                250,
+              ],
+          },
 
-      head: [
-        [
-          "Staff ID",
-          "Staff",
-          "Department",
-          "Position",
-          "Salary",
-          "Days",
-          "Earned",
-          "Deduction",
-          "Net Pay",
-          "Status",
-        ],
-      ],
+        styles:
+          {
+            fontSize:
+              8,
 
-      body: currentMonthPayroll.map(
-        (item) => [
-          item.staff_id,
+            cellPadding:
+              3,
 
-          item.staff_name,
+            valign:
+              "middle",
+          },
 
-          item.department,
+        head:
+          [
+            [
+              "Staff ID",
+              "Staff",
+              "Department",
+              "Position",
+              "Salary",
+              "Days",
+              "Earned",
+              "Deduction",
+              "Net Pay",
+              "Status",
+            ],
+          ],
 
-          item.position,
-
-          money(
-            Number(
-              item.basic_salary
-            )
+        body:
+          selectedMonthPayroll.map(
+            (
+              item
+            ) => [
+              item.staff_id,
+              item.staff_name,
+              item.department,
+              item.position,
+              money(
+                Number(
+                  item.basic_salary
+                )
+              ),
+              item.days_worked,
+              money(
+                Number(
+                  item.salary_earned
+                )
+              ),
+              money(
+                Number(
+                  item.total_deduction
+                )
+              ),
+              money(
+                Number(
+                  item.balance_payable
+                )
+              ),
+              item.payment_status,
+            ]
           ),
-
-          item.days_worked,
-
-          money(
-            Number(
-              item.salary_earned
-            )
-          ),
-
-          money(
-            Number(
-              item.total_deduction
-            )
-          ),
-
-          money(
-            Number(
-              item.balance_payable
-            )
-          ),
-
-          item.payment_status,
-        ]
-      ),
-    });
+      }
+    );
 
     const finalY =
-      (doc as any).lastAutoTable
-        .finalY + 15;
+      (doc as any)
+        .lastAutoTable
+        .finalY +
+      15;
 
-    doc.setFontSize(12);
+    /* -----------------------------------------------
+       SUMMARY BOX
+    ------------------------------------------------ */
 
-    doc.setDrawColor(200);
+    doc.setFontSize(
+      12
+    );
+
+    doc.setDrawColor(
+      200
+    );
 
     doc.roundedRect(
       14,
@@ -883,41 +1182,58 @@ export default function PayrollPage() {
     doc.text(
       "Gross Payroll",
       18,
-      finalY + 8
+      finalY +
+        8
     );
 
     doc.text(
-      money(grossPayroll),
+      money(
+        grossPayroll
+      ),
       18,
-      finalY + 18
+      finalY +
+        18
     );
 
     doc.text(
       "Deductions",
       78,
-      finalY + 8
+      finalY +
+        8
     );
 
     doc.text(
-      money(totalDeductions),
+      money(
+        totalDeductions
+      ),
       78,
-      finalY + 18
+      finalY +
+        18
     );
 
     doc.text(
       "Net Payroll",
       150,
-      finalY + 8
+      finalY +
+        8
     );
 
     doc.text(
-      money(netPayroll),
+      money(
+        netPayroll
+      ),
       150,
-      finalY + 18
+      finalY +
+        18
     );
 
+    /* -----------------------------------------------
+       SIGNATURES
+    ------------------------------------------------ */
+
     const signY =
-      finalY + 50;
+      finalY +
+      50;
 
     doc.line(
       18,
@@ -929,7 +1245,8 @@ export default function PayrollPage() {
     doc.text(
       "Prepared By",
       25,
-      signY + 6
+      signY +
+        6
     );
 
     doc.line(
@@ -942,7 +1259,8 @@ export default function PayrollPage() {
     doc.text(
       "Finance Manager",
       88,
-      signY + 6
+      signY +
+        6
     );
 
     doc.line(
@@ -955,10 +1273,13 @@ export default function PayrollPage() {
     doc.text(
       "CEO Approval",
       154,
-      signY + 6
+      signY +
+        6
     );
 
-    doc.setFontSize(9);
+    doc.setFontSize(
+      9
+    );
 
     doc.setTextColor(
       120,
@@ -971,12 +1292,13 @@ export default function PayrollPage() {
       105,
       290,
       {
-        align: "center",
+        align:
+          "center",
       }
     );
 
     doc.save(
-      `Payroll-${payrollMonth}-${payrollYear}.pdf`
+      `Payroll-${selectedPayrollMonth}-${selectedPayrollYear}.pdf`
     );
   }
 
@@ -985,10 +1307,14 @@ export default function PayrollPage() {
   ===================================================== */
 
   function printPayroll() {
-    if (currentMonthPayroll.length === 0) {
+    if (
+      selectedMonthPayroll.length ===
+      0
+    ) {
       alert(
-        "Generate this month's payroll before printing."
+        `There is no payroll generated for ${selectedPayrollMonth} ${selectedPayrollYear}.`
       );
+
       return;
     }
 
@@ -1041,13 +1367,14 @@ export default function PayrollPage() {
               </h1>
 
               <p className="mt-3 text-slate-300 text-lg">
-                Payroll runs from the 1st through the last
-                day of every month.
+                Generate payroll for any selected month at any time.
               </p>
 
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+
+              {/* MONTH */}
 
               <div className="rounded-2xl bg-white/10 backdrop-blur-lg p-5 border border-white/10">
 
@@ -1056,11 +1383,13 @@ export default function PayrollPage() {
                 </p>
 
                 <h2 className="text-2xl font-bold text-white mt-2">
-                  {payrollMonth}{" "}
-                  {payrollYear}
+                  {selectedPayrollMonth}{" "}
+                  {selectedPayrollYear}
                 </h2>
 
               </div>
+
+              {/* PERIOD */}
 
               <div className="rounded-2xl bg-white/10 backdrop-blur-lg p-5 border border-white/10">
 
@@ -1074,6 +1403,8 @@ export default function PayrollPage() {
 
               </div>
 
+              {/* COMPANY */}
+
               <div className="rounded-2xl bg-white/10 backdrop-blur-lg p-5 border border-white/10">
 
                 <p className="text-xs uppercase tracking-widest text-slate-400">
@@ -1085,6 +1416,8 @@ export default function PayrollPage() {
                 </h2>
 
               </div>
+
+              {/* STATUS */}
 
               <div className="rounded-2xl bg-white/10 backdrop-blur-lg p-5 border border-white/10">
 
@@ -1113,10 +1446,159 @@ export default function PayrollPage() {
         </div>
 
         {/* =====================================================
+            PAYROLL PERIOD FILTER
+        ===================================================== */}
+
+        <div className="rounded-3xl bg-white shadow-xl p-8 mb-8">
+
+          <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-6">
+
+            <div>
+
+              <div className="flex items-center gap-3">
+
+                <div className="rounded-2xl bg-blue-100 p-3">
+                  <CalendarDays
+                    size={25}
+                    className="text-blue-800"
+                  />
+                </div>
+
+                <div>
+
+                  <h2 className="text-2xl font-black text-slate-900">
+                    Select Payroll Period
+                  </h2>
+
+                  <p className="text-slate-500 mt-1">
+                    Choose the month and year you want to generate or view.
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4">
+
+              {/* MONTH SELECTOR */}
+
+              <div className="relative">
+
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Month
+                </label>
+
+                <div className="relative">
+
+                  <select
+                    value={selectedPayrollMonth}
+                    onChange={(e) =>
+                      changePayrollMonth(
+                        e.target.value
+                      )
+                    }
+                    className="appearance-none min-w-[190px] rounded-2xl border-2 border-slate-200 bg-white px-5 py-4 pr-12 font-bold text-slate-900 outline-none transition focus:border-blue-800"
+                  >
+                    {months.map(
+                      (month) => (
+                        <option
+                          key={month}
+                          value={month}
+                        >
+                          {month}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  <ChevronDown
+                    size={18}
+                    className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-500"
+                  />
+
+                </div>
+
+              </div>
+
+              {/* YEAR SELECTOR */}
+
+              <div className="relative">
+
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Year
+                </label>
+
+                <div className="relative">
+
+                  <select
+                    value={selectedPayrollYear}
+                    onChange={(e) =>
+                      changePayrollYear(
+                        Number(
+                          e.target.value
+                        )
+                      )
+                    }
+                    className="appearance-none min-w-[150px] rounded-2xl border-2 border-slate-200 bg-white px-5 py-4 pr-12 font-bold text-slate-900 outline-none transition focus:border-blue-800"
+                  >
+                    {years.map(
+                      (year) => (
+                        <option
+                          key={year}
+                          value={year}
+                        >
+                          {year}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  <ChevronDown
+                    size={18}
+                    className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-500"
+                  />
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* SELECTED PERIOD MESSAGE */}
+
+          <div className="mt-6 rounded-2xl bg-blue-50 border border-blue-100 p-5">
+
+            <p className="text-blue-900 font-semibold">
+
+              Selected payroll period:
+
+              <span className="font-black ml-2">
+                1 - {daysInMonth}{" "}
+                {selectedPayrollMonth}{" "}
+                {selectedPayrollYear}
+              </span>
+
+            </p>
+
+            <p className="text-sm text-blue-700 mt-1">
+              Payroll can be generated now. There is no requirement to wait until the end of the month.
+            </p>
+
+          </div>
+
+        </div>
+
+        {/* =====================================================
             SUMMARY
         ===================================================== */}
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+
+          {/* EMPLOYEES */}
 
           <div className="rounded-3xl bg-white shadow-xl p-7">
 
@@ -1134,11 +1616,13 @@ export default function PayrollPage() {
             </div>
 
             <h2 className="text-4xl font-black text-slate-900 mt-6">
-              {currentMonthPayroll.length ||
+              {selectedMonthPayroll.length ||
                 staff.length}
             </h2>
 
           </div>
+
+          {/* GROSS */}
 
           <div className="rounded-3xl bg-white shadow-xl p-7">
 
@@ -1156,10 +1640,14 @@ export default function PayrollPage() {
             </div>
 
             <h2 className="text-3xl font-black text-green-700 mt-6">
-              {money(grossPayroll)}
+              {money(
+                grossPayroll
+              )}
             </h2>
 
           </div>
+
+          {/* DEDUCTIONS */}
 
           <div className="rounded-3xl bg-white shadow-xl p-7">
 
@@ -1177,10 +1665,14 @@ export default function PayrollPage() {
             </div>
 
             <h2 className="text-3xl font-black text-red-600 mt-6">
-              {money(totalDeductions)}
+              {money(
+                totalDeductions
+              )}
             </h2>
 
           </div>
+
+          {/* BALANCE */}
 
           <div className="rounded-3xl bg-white shadow-xl p-7">
 
@@ -1198,17 +1690,22 @@ export default function PayrollPage() {
             </div>
 
             <h2 className="text-3xl font-black text-slate-900 mt-6">
-              {money(netPayroll)}
+              {money(
+                netPayroll
+              )}
             </h2>
 
             {payrollAlreadyGenerated && (
               <p className="text-sm text-slate-500 mt-3">
+
                 Outstanding:{" "}
+
                 <span className="font-bold text-red-600">
                   {money(
                     outstandingPayroll
                   )}
                 </span>
+
               </p>
             )}
 
@@ -1231,14 +1728,19 @@ export default function PayrollPage() {
               </h2>
 
               <p className="text-slate-500 mt-2">
-                Generate the current month's payroll,
-                download the payroll sheet or print it.
+                Generate payroll for the selected month, download the payroll sheet or print it.
               </p>
 
-              {!payrollAlreadyGenerated && (
-                <p className="text-blue-700 font-semibold mt-2">
-                  Payroll period: 1 - {daysInMonth}{" "}
-                  {payrollMonth} {payrollYear}
+              <p className="text-blue-700 font-semibold mt-3">
+                Payroll period: 1 -{" "}
+                {daysInMonth}{" "}
+                {selectedPayrollMonth}{" "}
+                {selectedPayrollYear}
+              </p>
+
+              {payrollAlreadyGenerated && (
+                <p className="text-green-700 font-semibold mt-2">
+                  Payroll for this period has already been generated.
                 </p>
               )}
 
@@ -1246,8 +1748,12 @@ export default function PayrollPage() {
 
             <div className="flex flex-wrap gap-4">
 
+              {/* GENERATE */}
+
               <button
-                onClick={generatePayroll}
+                onClick={
+                  generatePayroll
+                }
                 disabled={
                   generating ||
                   payrollAlreadyGenerated
@@ -1266,19 +1772,51 @@ export default function PayrollPage() {
                   : "Generate Payroll"}
               </button>
 
+              {/* DOWNLOAD */}
+
               <button
-                onClick={downloadPayroll}
-                className="rounded-2xl bg-emerald-700 hover:bg-emerald-800 px-6 py-4 text-white font-bold transition flex items-center gap-2"
+                onClick={
+                  downloadPayroll
+                }
+                disabled={
+                  selectedMonthPayroll.length ===
+                  0
+                }
+                className={`rounded-2xl px-6 py-4 text-white font-bold transition flex items-center gap-2 ${
+                  selectedMonthPayroll.length ===
+                  0
+                    ? "bg-slate-400 cursor-not-allowed"
+                    : "bg-emerald-700 hover:bg-emerald-800"
+                }`}
               >
-                <Download size={18} />
+                <Download
+                  size={18}
+                />
+
                 Download
               </button>
 
+              {/* PRINT */}
+
               <button
-                onClick={printPayroll}
-                className="rounded-2xl bg-slate-800 hover:bg-black px-6 py-4 text-white font-bold transition flex items-center gap-2"
+                onClick={
+                  printPayroll
+                }
+                disabled={
+                  selectedMonthPayroll.length ===
+                  0
+                }
+                className={`rounded-2xl px-6 py-4 text-white font-bold transition flex items-center gap-2 ${
+                  selectedMonthPayroll.length ===
+                  0
+                    ? "bg-slate-400 cursor-not-allowed"
+                    : "bg-slate-800 hover:bg-black"
+                }`}
               >
-                <Printer size={18} />
+                <Printer
+                  size={18}
+                />
+
                 Print
               </button>
 
@@ -1294,24 +1832,28 @@ export default function PayrollPage() {
 
         <div className="rounded-3xl bg-white shadow-xl p-6 mb-8">
 
-          <div className="flex items-center justify-between gap-5">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
 
             <input
               value={search}
               onChange={(e) =>
-                setSearch(e.target.value)
+                setSearch(
+                  e.target.value
+                )
               }
-              placeholder="Search employee..."
+              placeholder={`Search ${selectedPayrollMonth} ${selectedPayrollYear} payroll...`}
               className="w-full lg:w-96 rounded-2xl border-2 border-slate-200 px-5 py-4 outline-none focus:border-blue-800"
             />
 
             <div className="flex items-center gap-2 text-slate-600">
 
-              <CalendarDays size={20} />
+              <CalendarDays
+                size={20}
+              />
 
               <span className="font-semibold">
-                {payrollMonth}{" "}
-                {payrollYear}
+                {selectedPayrollMonth}{" "}
+                {selectedPayrollYear}
               </span>
 
             </div>
@@ -1388,7 +1930,8 @@ export default function PayrollPage() {
 
               <tbody>
 
-                {filteredPayroll.length === 0 ? (
+                {filteredPayroll.length ===
+                0 ? (
 
                   <tr>
 
@@ -1396,9 +1939,11 @@ export default function PayrollPage() {
                       colSpan={12}
                       className="text-center py-16 text-slate-500"
                     >
+
                       {payrollAlreadyGenerated
                         ? "No payroll records match your search."
-                        : "No payroll generated for this month."}
+                        : `No payroll generated for ${selectedPayrollMonth} ${selectedPayrollYear}.`}
+
                     </td>
 
                   </tr>
@@ -1409,7 +1954,9 @@ export default function PayrollPage() {
                     (item) => (
 
                       <tr
-                        key={item.id}
+                        key={
+                          item.id
+                        }
                         className="border-b hover:bg-slate-50"
                       >
 
@@ -1422,7 +1969,9 @@ export default function PayrollPage() {
                           <div>
 
                             <p className="font-bold text-slate-900">
-                              {item.staff_name}
+                              {
+                                item.staff_name
+                              }
                             </p>
 
                             <p className="text-sm text-slate-500">
@@ -1435,21 +1984,29 @@ export default function PayrollPage() {
                         </td>
 
                         <td className="px-6 py-5">
-                          {item.department}
+                          {
+                            item.department
+                          }
                         </td>
 
                         <td className="px-6 py-5">
-                          {item.position}
+                          {
+                            item.position
+                          }
                         </td>
 
                         <td className="px-6 py-5">
-                          {item.bank_name ||
-                            "-"}
+                          {
+                            item.bank_name ||
+                            "-"
+                          }
                         </td>
 
                         <td className="px-6 py-5 font-mono">
-                          {item.account_number ||
-                            "-"}
+                          {
+                            item.account_number ||
+                            "-"
+                          }
                         </td>
 
                         <td className="px-6 py-5 text-right font-semibold">
@@ -1461,7 +2018,9 @@ export default function PayrollPage() {
                         </td>
 
                         <td className="px-6 py-5 text-center font-semibold">
-                          {item.days_worked}
+                          {
+                            item.days_worked
+                          }
                         </td>
 
                         <td className="px-6 py-5 text-right font-semibold text-blue-700">
@@ -1546,9 +2105,21 @@ export default function PayrollPage() {
 
         <div className="rounded-3xl bg-white shadow-xl p-8">
 
-          <h2 className="text-3xl font-black text-slate-900 mb-6">
-            Payroll Records
-          </h2>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+
+            <div>
+
+              <h2 className="text-3xl font-black text-slate-900">
+                Payroll Records
+              </h2>
+
+              <p className="text-slate-500 mt-2">
+                All generated payroll periods are stored here.
+              </p>
+
+            </div>
+
+          </div>
 
           <div className="overflow-x-auto">
 
@@ -1597,112 +2168,183 @@ export default function PayrollPage() {
                       ]
                     )
                   ).values()
-                ).map((row) => {
-
-                  const monthPayroll =
-                    payroll.filter(
-                      (item) =>
-                        item.payroll_month ===
-                          row.payroll_month &&
-                        Number(
-                          item.payroll_year
-                        ) ===
+                )
+                  .sort(
+                    (a, b) => {
+                      const dateA =
+                        new Date(
                           Number(
-                            row.payroll_year
-                          )
-                    );
+                            a.payroll_year
+                          ),
+                          getMonthIndex(
+                            a.payroll_month
+                          ),
+                          1
+                        ).getTime();
 
-                  const historicalGross =
-                    monthPayroll.reduce(
-                      (sum, item) =>
-                        sum +
-                        Number(
-                          item.salary_earned ||
-                            0
-                        ),
-                      0
-                    );
+                      const dateB =
+                        new Date(
+                          Number(
+                            b.payroll_year
+                          ),
+                          getMonthIndex(
+                            b.payroll_month
+                          ),
+                          1
+                        ).getTime();
 
-                  const historicalDeductions =
-                    monthPayroll.reduce(
-                      (sum, item) =>
-                        sum +
-                        Number(
-                          item.total_deduction ||
-                            0
-                        ),
-                      0
-                    );
+                      return (
+                        dateB -
+                        dateA
+                      );
+                    }
+                  )
+                  .map(
+                    (row) => {
 
-                  const historicalNet =
-                    monthPayroll.reduce(
-                      (sum, item) =>
-                        sum +
-                        Number(
-                          item.balance_payable ||
-                            0
-                        ),
-                      0
-                    );
-
-                  return (
-                    <tr
-                      key={`${row.payroll_month}-${row.payroll_year}`}
-                      className="border-b hover:bg-slate-50"
-                    >
-
-                      <td className="px-6 py-5 font-semibold">
-                        {row.payroll_month}{" "}
-                        {row.payroll_year}
-                      </td>
-
-                      <td className="px-6 py-5 text-center">
-                        {
-                          monthPayroll.length
-                        }
-                      </td>
-
-                      <td className="px-6 py-5 text-right">
-                        {money(
-                          historicalGross
-                        )}
-                      </td>
-
-                      <td className="px-6 py-5 text-right text-red-600">
-                        {money(
-                          historicalDeductions
-                        )}
-                      </td>
-
-                      <td className="px-6 py-5 text-right text-green-700 font-bold">
-                        {money(
-                          historicalNet
-                        )}
-                      </td>
-
-                      <td className="px-6 py-5 text-center">
-
-                        <button
-                          onClick={() =>
-                            viewPayroll(
-                              row.payroll_month,
+                      const monthPayroll =
+                        payroll.filter(
+                          (item) =>
+                            item.payroll_month ===
+                              row.payroll_month &&
+                            Number(
+                              item.payroll_year
+                            ) ===
                               Number(
                                 row.payroll_year
                               )
-                            )
-                          }
-                          className="rounded-xl bg-blue-900 hover:bg-blue-950 text-white px-5 py-2"
+                        );
+
+                      const historicalGross =
+                        monthPayroll.reduce(
+                          (
+                            sum,
+                            item
+                          ) =>
+                            sum +
+                            Number(
+                              item.salary_earned ||
+                                0
+                            ),
+                          0
+                        );
+
+                      const historicalDeductions =
+                        monthPayroll.reduce(
+                          (
+                            sum,
+                            item
+                          ) =>
+                            sum +
+                            Number(
+                              item.total_deduction ||
+                                0
+                            ),
+                          0
+                        );
+
+                      const historicalNet =
+                        monthPayroll.reduce(
+                          (
+                            sum,
+                            item
+                          ) =>
+                            sum +
+                            Number(
+                              item.balance_payable ||
+                                0
+                            ),
+                          0
+                        );
+
+                      return (
+                        <tr
+                          key={`${row.payroll_month}-${row.payroll_year}`}
+                          className={`border-b hover:bg-slate-50 ${
+                            row.payroll_month ===
+                              selectedPayrollMonth &&
+                            Number(
+                              row.payroll_year
+                            ) ===
+                              Number(
+                                selectedPayrollYear
+                              )
+                              ? "bg-blue-50"
+                              : ""
+                          }`}
                         >
-                          View
-                        </button>
 
-                      </td>
+                          <td className="px-6 py-5 font-semibold">
 
-                    </tr>
-                  );
-                })}
+                            {row.payroll_month}{" "}
+                            {row.payroll_year}
 
-                {payroll.length === 0 && (
+                            {row.payroll_month ===
+                              selectedPayrollMonth &&
+                              Number(
+                                row.payroll_year
+                              ) ===
+                                Number(
+                                  selectedPayrollYear
+                                ) && (
+
+                                <span className="ml-3 rounded-full bg-blue-100 text-blue-700 px-3 py-1 text-xs font-bold">
+                                  SELECTED
+                                </span>
+
+                              )}
+
+                          </td>
+
+                          <td className="px-6 py-5 text-center">
+                            {
+                              monthPayroll.length
+                            }
+                          </td>
+
+                          <td className="px-6 py-5 text-right">
+                            {money(
+                              historicalGross
+                            )}
+                          </td>
+
+                          <td className="px-6 py-5 text-right text-red-600">
+                            {money(
+                              historicalDeductions
+                            )}
+                          </td>
+
+                          <td className="px-6 py-5 text-right text-green-700 font-bold">
+                            {money(
+                              historicalNet
+                            )}
+                          </td>
+
+                          <td className="px-6 py-5 text-center">
+
+                            <button
+                              onClick={() =>
+                                viewPayroll(
+                                  row.payroll_month,
+                                  Number(
+                                    row.payroll_year
+                                  )
+                                )
+                              }
+                              className="rounded-xl bg-blue-900 hover:bg-blue-950 text-white px-5 py-2"
+                            >
+                              View
+                            </button>
+
+                          </td>
+
+                        </tr>
+                      );
+                    }
+                  )}
+
+                {payroll.length ===
+                  0 && (
 
                   <tr>
 
@@ -1749,14 +2391,17 @@ export default function PayrollPage() {
                   0 && (
 
                   <p className="text-slate-500 mt-1">
+
                     {
                       selectedPayroll[0]
                         .payroll_month
                     }{" "}
+
                     {
                       selectedPayroll[0]
                         .payroll_year
                     }
+
                   </p>
 
                 )}
@@ -1765,7 +2410,9 @@ export default function PayrollPage() {
 
               <button
                 onClick={() =>
-                  setShowPayrollModal(false)
+                  setShowPayrollModal(
+                    false
+                  )
                 }
                 className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-xl"
               >
@@ -1788,6 +2435,14 @@ export default function PayrollPage() {
 
                     <th className="p-4 text-left">
                       Department
+                    </th>
+
+                    <th className="p-4 text-left">
+                      Bank
+                    </th>
+
+                    <th className="p-4 text-left">
+                      Account No.
                     </th>
 
                     <th className="p-4 text-right">
@@ -1824,16 +2479,47 @@ export default function PayrollPage() {
                     (item) => (
 
                       <tr
-                        key={item.id}
+                        key={
+                          item.id
+                        }
                         className="border-b"
                       >
 
                         <td className="p-4">
-                          {item.staff_name}
+
+                          <p className="font-bold">
+                            {
+                              item.staff_name
+                            }
+                          </p>
+
+                          <p className="text-xs text-slate-500">
+                            {
+                              item.account_name ||
+                              "No account name"
+                            }
+                          </p>
+
                         </td>
 
                         <td className="p-4">
-                          {item.department}
+                          {
+                            item.department
+                          }
+                        </td>
+
+                        <td className="p-4">
+                          {
+                            item.bank_name ||
+                            "-"
+                          }
+                        </td>
+
+                        <td className="p-4 font-mono">
+                          {
+                            item.account_number ||
+                            "-"
+                          }
                         </td>
 
                         <td className="p-4 text-right">
@@ -1845,7 +2531,9 @@ export default function PayrollPage() {
                         </td>
 
                         <td className="p-4 text-center">
-                          {item.days_worked}
+                          {
+                            item.days_worked
+                          }
                         </td>
 
                         <td className="p-4 text-right">

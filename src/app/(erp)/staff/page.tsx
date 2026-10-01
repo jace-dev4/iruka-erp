@@ -122,6 +122,15 @@ export default function StaffPage() {
   const [profileStaff, setProfileStaff] =
     useState<any>(null);
 
+    const [profilePaymentCount, setProfilePaymentCount] =
+  useState(0);
+
+const [profileTotalPaid, setProfileTotalPaid] =
+  useState(0);
+
+const [loadingProfilePayments, setLoadingProfilePayments] =
+  useState(false);
+
   /* =====================================================
      EDIT STAFF
   ====================================================== */
@@ -283,6 +292,96 @@ async function generateStaffId() {
       setRefreshing(false);
     }
   }
+
+  /* =====================================================
+   LOAD STAFF PAYMENT SUMMARY
+====================================================== */
+
+async function loadProfilePaymentSummary(
+  staffMember: any
+) {
+  if (!staffMember?.full_name) {
+    setProfilePaymentCount(0);
+    setProfileTotalPaid(0);
+    return;
+  }
+
+  setLoadingProfilePayments(true);
+
+  try {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("payroll")
+      .select(
+        "balance_payable, payment_status"
+      )
+      .eq(
+        "staff_name",
+        staffMember.full_name
+      )
+      .eq(
+        "payment_status",
+        "Paid"
+      );
+
+    if (error) {
+      console.error(
+        "Profile payroll error:",
+        {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        }
+      );
+
+      setProfilePaymentCount(0);
+      setProfileTotalPaid(0);
+
+      return;
+    }
+
+    const payments = data || [];
+
+    const totalPaid =
+      payments.reduce(
+        (
+          sum: number,
+          payment: any
+        ) =>
+          sum +
+          Number(
+            payment.balance_payable || 0
+          ),
+        0
+      );
+
+    setProfilePaymentCount(
+      payments.length
+    );
+
+    setProfileTotalPaid(
+      totalPaid
+    );
+
+  } catch (error: any) {
+
+    console.error(
+      "Unable to load profile payment summary:",
+      error
+    );
+
+    setProfilePaymentCount(0);
+    setProfileTotalPaid(0);
+
+  } finally {
+
+    setLoadingProfilePayments(false);
+
+  }
+}
 
   /* =====================================================
      REGISTER STAFF
@@ -1880,10 +1979,16 @@ async function updateStaff() {
                       return (
                         <tr
                           key={member.id}
-                          onClick={() => {
-                            setProfileStaff(member);
-                            setShowProfileModal(true);
-                          }}
+onClick={() => {
+  setProfileStaff(member);
+
+  setProfilePaymentCount(0);
+  setProfileTotalPaid(0);
+
+  setShowProfileModal(true);
+
+  loadProfilePaymentSummary(member);
+}}
                           className="cursor-pointer border-b border-slate-700 hover:bg-slate-800 transition"
                         >
 
@@ -3014,6 +3119,145 @@ async function updateStaff() {
                     </div>
 
                   </div>
+
+                  {/* =====================================================
+    PAYMENT DETAILS
+===================================================== */}
+
+<div className="lg:col-span-2">
+
+  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7">
+
+    <div className="flex items-center justify-between mb-6">
+
+      <div>
+
+        <h3 className="text-2xl font-black text-slate-900">
+          Payment Details
+        </h3>
+
+        <p className="mt-1 text-sm text-slate-500">
+          Employee salary and lifetime payment summary
+        </p>
+
+      </div>
+
+      <div className="h-12 w-12 rounded-2xl bg-blue-100 flex items-center justify-center text-2xl">
+        💳
+      </div>
+
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+
+      {/* BANK NAME */}
+
+      <div className="rounded-2xl bg-white border border-slate-200 p-5">
+
+        <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+          🏦 Bank Name
+        </p>
+
+        <p className="mt-2 text-lg font-black text-slate-900">
+          {profileStaff.bank_name || "-"}
+        </p>
+
+      </div>
+
+      {/* ACCOUNT NAME */}
+
+      <div className="rounded-2xl bg-white border border-slate-200 p-5">
+
+        <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+          👤 Account Name
+        </p>
+
+        <p className="mt-2 text-lg font-black text-slate-900">
+          {profileStaff.account_name || "-"}
+        </p>
+
+      </div>
+
+      {/* ACCOUNT NUMBER */}
+
+      <div className="rounded-2xl bg-white border border-slate-200 p-5">
+
+        <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+          💳 Account Number
+        </p>
+
+        <p className="mt-2 text-lg font-black tracking-wider text-slate-900">
+          {profileStaff.account_number || "-"}
+        </p>
+
+      </div>
+
+      {/* CURRENT SALARY */}
+
+      <div className="rounded-2xl bg-white border border-slate-200 p-5">
+
+        <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+          💰 Current Salary
+        </p>
+
+        <p className="mt-2 text-2xl font-black text-blue-900">
+          ₦
+          {Number(
+            profileStaff.salary || 0
+          ).toLocaleString()}
+        </p>
+
+      </div>
+
+      {/* NUMBER OF PAYMENTS */}
+
+      <div className="rounded-2xl bg-white border border-slate-200 p-5">
+
+        <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+          📊 Salary Payments Made
+        </p>
+
+        <p className="mt-2 text-3xl font-black text-emerald-700">
+
+          {loadingProfilePayments
+            ? "..."
+            : profilePaymentCount}
+
+        </p>
+
+        <p className="mt-1 text-xs text-slate-500">
+          Paid salary records
+        </p>
+
+      </div>
+
+      {/* TOTAL PAID */}
+
+      <div className="rounded-2xl bg-gradient-to-br from-blue-950 to-slate-900 p-5 text-white shadow-lg">
+
+        <p className="text-xs font-black uppercase tracking-wider text-blue-200">
+          💵 Total Amount Paid
+        </p>
+
+        <p className="mt-2 text-2xl font-black">
+
+          {loadingProfilePayments
+            ? "..."
+            : `₦${profileTotalPaid.toLocaleString()}`}
+
+        </p>
+
+        <p className="mt-1 text-xs text-blue-200">
+          Since joining the company
+        </p>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
 
                   <div>
 

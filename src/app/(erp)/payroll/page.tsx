@@ -63,6 +63,7 @@ interface Payroll {
   payroll_month: string;
   payroll_year: number;
   payment_status: string;
+  paid_at: string | null;
   created_at: string;
 }
 
@@ -126,14 +127,19 @@ export default function PayrollPage() {
   const [showPayrollModal, setShowPayrollModal] =
     useState(false);
 
+    const [selectedEmployeePayroll, setSelectedEmployeePayroll] =
+  useState<Payroll | null>(null);
+
+const [showEmployeePayrollModal, setShowEmployeePayrollModal] =
+  useState(false);
+
+const [processingPayment, setProcessingPayment] =
+  useState(false);
+
   const [search, setSearch] = useState("");
 
   /* =====================================================
      SELECTED PAYROLL PERIOD
-
-     Default = current month/year.
-
-     The user can change this at ANY TIME.
   ===================================================== */
 
   const [selectedPayrollMonth, setSelectedPayrollMonth] =
@@ -163,10 +169,6 @@ export default function PayrollPage() {
 
   /* =====================================================
      YEARS
-
-     Allows previous years and future years.
-
-     Adjust range later if needed.
   ===================================================== */
 
   const currentYear = now.getFullYear();
@@ -216,20 +218,20 @@ export default function PayrollPage() {
       ] = await Promise.all([
         supabase
           .from("staff")
-.select(`
-  id,
-  staff_id,
-  full_name,
-  department,
-  position,
-  salary,
-  bank_name,
-  account_name,
-  account_number,
-  employment_status,
-  date_joined,
-  photo_url
-`)
+          .select(`
+            id,
+            staff_id,
+            full_name,
+            department,
+            position,
+            salary,
+            bank_name,
+            account_name,
+            account_number,
+            employment_status,
+            date_joined,
+            photo_url
+          `)
           .eq("employment_status", "Active")
           .order("full_name"),
 
@@ -306,10 +308,8 @@ export default function PayrollPage() {
     fetchData();
   }, []);
 
-    /* =====================================================
+  /* =====================================================
      STAFF LOOKUP
-
-     Connect payroll staff_id to the real staff record.
 
      payroll.staff_id = staff.id
      staff.staff_id   = visible Staff ID
@@ -332,11 +332,6 @@ export default function PayrollPage() {
 
   /* =====================================================
      STAFF DEBT DEDUCTION
-
-     IMPORTANT:
-
-     Debt is matched against the SELECTED payroll
-     month/year, not today's month/year.
   ===================================================== */
 
   function getDeduction(staffName: string) {
@@ -358,22 +353,6 @@ export default function PayrollPage() {
 
   /* =====================================================
      CALCULATE DAYS WORKED
-
-     Uses the SELECTED payroll month.
-
-     Example:
-
-     Selected month = October 2026
-
-     Joined:
-     Before October 1
-       → 31 days
-
-     Joined October 10
-       → 22 days
-
-     Joined after October 31
-       → 0 days
   ===================================================== */
 
   function calculateDaysWorked(
@@ -456,46 +435,39 @@ export default function PayrollPage() {
 
   /* =====================================================
      SELECTED MONTH PAYROLL
-
-     Everything on the main page now follows the
-     selected month/year.
   ===================================================== */
 
-const selectedMonthPayroll =
-  useMemo(() => {
-    const filtered = payroll.filter(
-      (item) =>
-        item.payroll_month ===
-          selectedPayrollMonth &&
-        Number(item.payroll_year) ===
-          Number(selectedPayrollYear)
-    );
-
-    /*
-      ALWAYS SORT PAYROLL
-      A → Z BY STAFF NAME
-    */
-    return [...filtered].sort((a, b) => {
-      const nameA =
-        String(a.staff_name || "").trim();
-
-      const nameB =
-        String(b.staff_name || "").trim();
-
-      return nameA.localeCompare(
-        nameB,
-        undefined,
-        {
-          sensitivity: "base",
-          numeric: true,
-        }
+  const selectedMonthPayroll =
+    useMemo(() => {
+      const filtered = payroll.filter(
+        (item) =>
+          item.payroll_month ===
+            selectedPayrollMonth &&
+          Number(item.payroll_year) ===
+            Number(selectedPayrollYear)
       );
-    });
-  }, [
-    payroll,
-    selectedPayrollMonth,
-    selectedPayrollYear,
-  ]);
+
+      return [...filtered].sort((a, b) => {
+        const nameA =
+          String(a.staff_name || "").trim();
+
+        const nameB =
+          String(b.staff_name || "").trim();
+
+        return nameA.localeCompare(
+          nameB,
+          undefined,
+          {
+            sensitivity: "base",
+            numeric: true,
+          }
+        );
+      });
+    }, [
+      payroll,
+      selectedPayrollMonth,
+      selectedPayrollYear,
+    ]);
 
   /* =====================================================
      CHECK WHETHER SELECTED PAYROLL EXISTS
@@ -506,23 +478,10 @@ const selectedMonthPayroll =
 
   /* =====================================================
      GENERATE PAYROLL
-
-     IMPORTANT:
-
-     Payroll can now be generated ANY TIME.
-
-     There is NO month-end restriction.
-
-     The selected month/year determines the payroll
-     period.
   ===================================================== */
 
   async function generatePayroll() {
     if (generating) return;
-
-    /* -----------------------------------------------
-       Prevent duplicate payroll
-    ------------------------------------------------ */
 
     if (payrollAlreadyGenerated) {
       alert(
@@ -531,10 +490,6 @@ const selectedMonthPayroll =
 
       return;
     }
-
-    /* -----------------------------------------------
-       Make sure there are active staff
-    ------------------------------------------------ */
 
     if (staff.length === 0) {
       alert(
@@ -553,19 +508,11 @@ const selectedMonthPayroll =
       let totalDeductions = 0;
       let netPayroll = 0;
 
-      /* ---------------------------------------------
-         Calculate every employee
-      ---------------------------------------------- */
-
       for (const employee of staff) {
         const calculation =
           calculatePayrollForStaff(
             employee
           );
-
-        /*
-          Staff who had not joined yet are excluded.
-        */
 
         if (
           calculation.daysWorked <= 0
@@ -637,10 +584,6 @@ const selectedMonthPayroll =
         });
       }
 
-      /* ---------------------------------------------
-         Make sure there are eligible employees
-      ---------------------------------------------- */
-
       if (
         payrollRows.length === 0
       ) {
@@ -650,13 +593,6 @@ const selectedMonthPayroll =
 
         return;
       }
-
-      /* ---------------------------------------------
-         FINAL DUPLICATE CHECK
-
-         This protects against another payroll being
-         created after the page was loaded.
-      ---------------------------------------------- */
 
       const {
         data: existingPayroll,
@@ -700,10 +636,6 @@ const selectedMonthPayroll =
         return;
       }
 
-      /* ---------------------------------------------
-         INSERT PAYROLL
-      ---------------------------------------------- */
-
       const {
         error: payrollError,
       } = await supabase
@@ -722,10 +654,6 @@ const selectedMonthPayroll =
 
         return;
       }
-
-      /* ---------------------------------------------
-         SUCCESS
-      ---------------------------------------------- */
 
       alert(
         `${selectedPayrollMonth} ${selectedPayrollYear} payroll generated successfully.\n\n` +
@@ -755,27 +683,27 @@ const selectedMonthPayroll =
      PAY SALARY
   ===================================================== */
 
-  async function paySalary(
-    id: number
-  ) {
-    const confirmed =
-      window.confirm(
-        "Confirm that this salary has actually been paid?"
-      );
+  async function paySalary(id: number) {
+  if (processingPayment) return;
 
-    if (!confirmed) return;
+  const confirmed = window.confirm(
+    "Confirm that this salary has actually been paid?"
+  );
 
-    const { error } =
-      await supabase
-        .from("payroll")
-        .update({
-          payment_status:
-            "Paid",
-        })
-        .eq(
-          "id",
-          id
-        );
+  if (!confirmed) return;
+
+  try {
+    setProcessingPayment(true);
+
+    const paidAt = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("payroll")
+      .update({
+        payment_status: "Paid",
+        paid_at: paidAt,
+      })
+      .eq("id", id);
 
     if (error) {
       console.error(
@@ -783,19 +711,40 @@ const selectedMonthPayroll =
         error
       );
 
-      alert(
-        error.message
-      );
-
+      alert(error.message);
       return;
     }
 
     await fetchData();
 
-    alert(
-      "Salary marked as paid successfully."
+    setSelectedEmployeePayroll((current) =>
+      current
+        ? {
+            ...current,
+            payment_status: "Paid",
+            paid_at: paidAt,
+          }
+        : null
     );
+  } catch (error: any) {
+    console.error(
+      "Salary Payment Error:",
+      error
+    );
+
+    alert(
+      error?.message ||
+        "Unable to mark salary as paid."
+    );
+  } finally {
+    setProcessingPayment(false);
   }
+}
+
+function openEmployeePayroll(item: Payroll) {
+  setSelectedEmployeePayroll(item);
+  setShowEmployeePayrollModal(true);
+}
 
   /* =====================================================
      VIEW PAYROLL
@@ -988,369 +937,919 @@ const selectedMonthPayroll =
     setSearch("");
   }
 
-  /* =====================================================
-     DOWNLOAD PAYROLL
-  ===================================================== */
+/* =====================================================
+   DOWNLOAD PAYROLL PDF
+===================================================== */
 
-  function downloadPayroll() {
-    if (
-      selectedMonthPayroll.length ===
-      0
-    ) {
-      alert(
-        `There is no payroll generated for ${selectedPayrollMonth} ${selectedPayrollYear}.`
-      );
-
-      return;
-    }
-
-    const doc =
-      new jsPDF();
-
-    /* -----------------------------------------------
-       HEADER
-    ------------------------------------------------ */
-
-    doc.setFillColor(
-      15,
-      23,
-      42
+function downloadPayroll() {
+  if (selectedMonthPayroll.length === 0) {
+    alert(
+      `There is no payroll generated for ${selectedPayrollMonth} ${selectedPayrollYear}.`
     );
-
-    doc.rect(
-      0,
-      0,
-      210,
-      35,
-      "F"
-    );
-
-    doc.setTextColor(
-      255,
-      255,
-      255
-    );
-
-    doc.setFont(
-      "helvetica",
-      "bold"
-    );
-
-    doc.setFontSize(
-      22
-    );
-
-    doc.text(
-      "IRUKA INDUSTRIES LTD",
-      105,
-      16,
-      {
-        align:
-          "center",
-      }
-    );
-
-    doc.setFontSize(
-      13
-    );
-
-    doc.text(
-      "MONTHLY PAYROLL REPORT",
-      105,
-      25,
-      {
-        align:
-          "center",
-      }
-    );
-
-    doc.setTextColor(
-      0,
-      0,
-      0
-    );
-
-    doc.setFontSize(
-      11
-    );
-
-    doc.text(
-      `Payroll Period: 1 - ${daysInMonth} ${selectedPayrollMonth} ${selectedPayrollYear}`,
-      14,
-      45
-    );
-
-    doc.text(
-      `Generated: ${new Date().toLocaleDateString()}`,
-      140,
-      45
-    );
-
-    /* -----------------------------------------------
-       TABLE
-    ------------------------------------------------ */
-
-    autoTable(
-      doc,
-      {
-        startY:
-          55,
-
-        theme:
-          "grid",
-
-        headStyles:
-          {
-            fillColor:
-              [
-                15,
-                23,
-                42,
-              ],
-
-            textColor:
-              [
-                255,
-                255,
-                255,
-              ],
-
-            fontStyle:
-              "bold",
-
-            halign:
-              "center",
-          },
-
-        alternateRowStyles:
-          {
-            fillColor:
-              [
-                245,
-                247,
-                250,
-              ],
-          },
-
-        styles:
-          {
-            fontSize:
-              8,
-
-            cellPadding:
-              3,
-
-            valign:
-              "middle",
-          },
-
-        head:
-          [
-            [
-              "Staff ID",
-              "Staff",
-              "Department",
-              "Position",
-              "Salary",
-              "Days",
-              "Earned",
-              "Deduction",
-              "Net Pay",
-              "Status",
-            ],
-          ],
-
-        body:
-          selectedMonthPayroll.map(
-            (
-              item
-            ) => [
-              item.staff_id,
-              item.staff_name,
-              item.department,
-              item.position,
-              money(
-                Number(
-                  item.basic_salary
-                )
-              ),
-              item.days_worked,
-              money(
-                Number(
-                  item.salary_earned
-                )
-              ),
-              money(
-                Number(
-                  item.total_deduction
-                )
-              ),
-              money(
-                Number(
-                  item.balance_payable
-                )
-              ),
-              item.payment_status,
-            ]
-          ),
-      }
-    );
-
-    const finalY =
-      (doc as any)
-        .lastAutoTable
-        .finalY +
-      15;
-
-    /* -----------------------------------------------
-       SUMMARY BOX
-    ------------------------------------------------ */
-
-    doc.setFontSize(
-      12
-    );
-
-    doc.setDrawColor(
-      200
-    );
-
-    doc.roundedRect(
-      14,
-      finalY,
-      182,
-      28,
-      2,
-      2
-    );
-
-    doc.setFont(
-      "helvetica",
-      "bold"
-    );
-
-    doc.text(
-      "Gross Payroll",
-      18,
-      finalY +
-        8
-    );
-
-    doc.text(
-      money(
-        grossPayroll
-      ),
-      18,
-      finalY +
-        18
-    );
-
-    doc.text(
-      "Deductions",
-      78,
-      finalY +
-        8
-    );
-
-    doc.text(
-      money(
-        totalDeductions
-      ),
-      78,
-      finalY +
-        18
-    );
-
-    doc.text(
-      "Net Payroll",
-      150,
-      finalY +
-        8
-    );
-
-    doc.text(
-      money(
-        netPayroll
-      ),
-      150,
-      finalY +
-        18
-    );
-
-    /* -----------------------------------------------
-       SIGNATURES
-    ------------------------------------------------ */
-
-    const signY =
-      finalY +
-      50;
-
-    doc.line(
-      18,
-      signY,
-      70,
-      signY
-    );
-
-    doc.text(
-      "Prepared By",
-      25,
-      signY +
-        6
-    );
-
-    doc.line(
-      82,
-      signY,
-      134,
-      signY
-    );
-
-    doc.text(
-      "Finance Manager",
-      88,
-      signY +
-        6
-    );
-
-    doc.line(
-      146,
-      signY,
-      198,
-      signY
-    );
-
-    doc.text(
-      "CEO Approval",
-      154,
-      signY +
-        6
-    );
-
-    doc.setFontSize(
-      9
-    );
-
-    doc.setTextColor(
-      120,
-      120,
-      120
-    );
-
-    doc.text(
-      "Generated automatically by IRUKA ERP System",
-      105,
-      290,
-      {
-        align:
-          "center",
-      }
-    );
-
-    doc.save(
-      `Payroll-${selectedPayrollMonth}-${selectedPayrollYear}.pdf`
-    );
+    return;
   }
 
+  /* =====================================================
+     PDF DOCUMENT
+  ===================================================== */
+
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = 297;
+  const pageHeight = 210;
+
+  const margin = 10;
+
+  /* =====================================================
+     COLORS
+  ===================================================== */
+
+const navy: [number, number, number] = [15, 23, 42];
+const blue: [number, number, number] = [37, 99, 235];
+const lightBlue: [number, number, number] = [239, 246, 255];
+const slate: [number, number, number] = [71, 85, 105];
+const dark: [number, number, number] = [15, 23, 42];
+const green: [number, number, number] = [5, 150, 105];
+const lightGreen: [number, number, number] = [236, 253, 245];
+const yellow: [number, number, number] = [217, 119, 6];
+const lightYellow: [number, number, number] = [255, 251, 235];
+const red: [number, number, number] = [220, 38, 38];
+const line: [number, number, number] = [226, 232, 240];
+
+  /* =====================================================
+     HEADER / BRAND AREA
+  ===================================================== */
+
+  doc.setFillColor(
+    navy[0],
+    navy[1],
+    navy[2]
+  );
+
+  doc.rect(
+    0,
+    0,
+    pageWidth,
+    42,
+    "F"
+  );
+
+  /* -----------------------------------------------------
+     LOGO BOX
+  ----------------------------------------------------- */
+
+  doc.setFillColor(
+    blue[0],
+    blue[1],
+    blue[2]
+  );
+
+  doc.roundedRect(
+    12,
+    8,
+    25,
+    25,
+    4,
+    4,
+    "F"
+  );
+
+  doc.setTextColor(
+    255,
+    255,
+    255
+  );
+
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  doc.setFontSize(
+    19
+  );
+
+  doc.text(
+    "I",
+    24.5,
+    25,
+    {
+      align: "center",
+    }
+  );
+
+  /* -----------------------------------------------------
+     BRAND NAME
+  ----------------------------------------------------- */
+
+  doc.setFontSize(
+    17
+  );
+
+  doc.setTextColor(
+    255,
+    255,
+    255
+  );
+
+  doc.text(
+    "IRUKA INDUSTRIES LTD",
+    44,
+    16
+  );
+
+  doc.setFont(
+    "helvetica",
+    "normal"
+  );
+
+  doc.setFontSize(
+    8
+  );
+
+  doc.setTextColor(
+    203,
+    213,
+    225
+  );
+
+  doc.text(
+    "NKIRUKA / IRUKA INDUSTRIES LTD",
+    44,
+    23
+  );
+
+  doc.setFontSize(
+    7.5
+  );
+
+  doc.text(
+    "BUSINESS MANAGEMENT • PRODUCTION • FINANCE • PAYROLL",
+    44,
+    29
+  );
+
+  /* -----------------------------------------------------
+     REPORT TITLE
+  ----------------------------------------------------- */
+
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  doc.setFontSize(
+    18
+  );
+
+  doc.setTextColor(
+    255,
+    255,
+    255
+  );
+
+  doc.text(
+    "MONTHLY PAYROLL REPORT",
+    pageWidth - 12,
+    17,
+    {
+      align: "right",
+    }
+  );
+
+  doc.setFont(
+    "helvetica",
+    "normal"
+  );
+
+  doc.setFontSize(
+    8
+  );
+
+  doc.setTextColor(
+    203,
+    213,
+    225
+  );
+
+  doc.text(
+    `${selectedPayrollMonth} ${selectedPayrollYear}`,
+    pageWidth - 12,
+    25,
+    {
+      align: "right",
+    }
+  );
+
+  doc.text(
+    `Generated ${new Date().toLocaleDateString(
+      "en-NG",
+      {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }
+    )}`,
+    pageWidth - 12,
+    31,
+    {
+      align: "right",
+    }
+  );
+
+  /* =====================================================
+     REPORT INFORMATION
+  ===================================================== */
+
+  doc.setTextColor(
+    dark[0],
+    dark[1],
+    dark[2]
+  );
+
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  doc.setFontSize(
+    9
+  );
+
+  doc.text(
+    "PAYROLL PERIOD",
+    margin,
+    51
+  );
+
+  doc.setFont(
+    "helvetica",
+    "normal"
+  );
+
+  doc.setFontSize(
+    9
+  );
+
+  doc.setTextColor(
+    slate[0],
+    slate[1],
+    slate[2]
+  );
+
+  doc.text(
+    `1 - ${daysInMonth} ${selectedPayrollMonth} ${selectedPayrollYear}`,
+    margin,
+    57
+  );
+
+  /* -----------------------------------------------------
+     EMPLOYEE COUNT
+  ----------------------------------------------------- */
+
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  doc.setTextColor(
+    dark[0],
+    dark[1],
+    dark[2]
+  );
+
+  doc.text(
+    "EMPLOYEES",
+    105,
+    51
+  );
+
+  doc.setFont(
+    "helvetica",
+    "normal"
+  );
+
+  doc.setTextColor(
+    slate[0],
+    slate[1],
+    slate[2]
+  );
+
+  doc.text(
+    `${selectedMonthPayroll.length} payroll record${
+      selectedMonthPayroll.length === 1
+        ? ""
+        : "s"
+    }`,
+    105,
+    57
+  );
+
+  /* -----------------------------------------------------
+     PAYMENT STATUS SUMMARY
+  ----------------------------------------------------- */
+
+  const paidCount =
+    selectedMonthPayroll.filter(
+      (item) =>
+        item.payment_status === "Paid"
+    ).length;
+
+  const readyCount =
+    selectedMonthPayroll.filter(
+      (item) =>
+        item.payment_status !== "Paid"
+    ).length;
+
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  doc.setTextColor(
+    dark[0],
+    dark[1],
+    dark[2]
+  );
+
+  doc.text(
+    "PAYMENT STATUS",
+    190,
+    51
+  );
+
+  doc.setFont(
+    "helvetica",
+    "normal"
+  );
+
+  doc.setTextColor(
+    green[0],
+    green[1],
+    green[2]
+  );
+
+  doc.text(
+    `Paid: ${paidCount}`,
+    190,
+    57
+  );
+
+  doc.setTextColor(
+    yellow[0],
+    yellow[1],
+    yellow[2]
+  );
+
+  doc.text(
+    `Ready: ${readyCount}`,
+    225,
+    57
+  );
+
+  /* =====================================================
+     PAYROLL TABLE
+  ===================================================== */
+
+  autoTable(doc, {
+    startY: 65,
+
+    margin: {
+      left: margin,
+      right: margin,
+    },
+
+    tableWidth: "auto",
+
+    theme: "grid",
+
+    head: [
+      [
+        "Staff ID",
+        "Employee",
+        "Department",
+        "Position",
+        "Basic Salary",
+        "Days",
+        "Salary Earned",
+        "Deduction",
+        "Balance Payable",
+        "Status",
+      ],
+    ],
+
+    body: selectedMonthPayroll.map(
+      (item) => [
+        staff.find(
+          (s) =>
+            s.id === item.staff_id
+        )?.staff_id || "-",
+
+        item.staff_name || "-",
+
+        item.department || "-",
+
+        item.position || "-",
+
+        money(
+          Number(
+            item.basic_salary
+          )
+        ),
+
+        String(
+          item.days_worked ?? 0
+        ),
+
+        money(
+          Number(
+            item.salary_earned
+          )
+        ),
+
+        money(
+          Number(
+            item.total_deduction
+          )
+        ),
+
+        money(
+          Number(
+            item.balance_payable
+          )
+        ),
+
+        item.payment_status ===
+        "Paid"
+          ? "PAID"
+          : "READY",
+      ]
+    ),
+
+    headStyles: {
+      fillColor: [
+        navy[0],
+        navy[1],
+        navy[2],
+      ],
+
+      textColor: [
+        255,
+        255,
+        255,
+      ],
+
+      fontStyle:
+        "bold",
+
+      fontSize: 7.5,
+
+      halign:
+        "center",
+
+      valign:
+        "middle",
+
+      cellPadding: 3,
+
+      lineWidth: 0,
+    },
+
+    bodyStyles: {
+      fontSize: 7,
+
+      textColor: [
+        30,
+        41,
+        59,
+      ],
+
+      valign:
+        "middle",
+
+      cellPadding: 2.7,
+
+      lineColor: [
+        ...line,
+      ],
+
+      lineWidth:
+        0.15,
+    },
+
+    alternateRowStyles: {
+      fillColor: [
+        248,
+        250,
+        252,
+      ],
+    },
+
+    styles: {
+      overflow:
+        "linebreak",
+
+      valign:
+        "middle",
+
+      font:
+        "helvetica",
+
+      lineColor: [
+        ...line,
+      ],
+
+      lineWidth:
+        0.15,
+    },
+
+    columnStyles: {
+      0: {
+        cellWidth: 25,
+        halign:
+          "center",
+      },
+
+      1: {
+        cellWidth: 37,
+        fontStyle:
+          "bold",
+      },
+
+      2: {
+        cellWidth: 29,
+      },
+
+      3: {
+        cellWidth: 29,
+      },
+
+      4: {
+        cellWidth: 27,
+        halign:
+          "right",
+      },
+
+      5: {
+        cellWidth: 17,
+        halign:
+          "center",
+      },
+
+      6: {
+        cellWidth: 29,
+        halign:
+          "right",
+      },
+
+      7: {
+        cellWidth: 27,
+        halign:
+          "right",
+      },
+
+      8: {
+        cellWidth: 30,
+        halign:
+          "right",
+      },
+
+      9: {
+        cellWidth: 25,
+        halign:
+          "center",
+      },
+    },
+
+    didParseCell:
+      (data) => {
+        if (
+          data.section ===
+            "body" &&
+          data.column.index ===
+            9
+        ) {
+          if (
+            data.cell.raw ===
+            "PAID"
+          ) {
+            data.cell.styles.textColor =
+              green;
+
+            data.cell.styles.fontStyle =
+              "bold";
+          } else {
+            data.cell.styles.textColor =
+              yellow;
+
+            data.cell.styles.fontStyle =
+              "bold";
+          }
+        }
+      },
+  });
+
+  /* =====================================================
+     SUMMARY
+  ===================================================== */
+
+  const finalY =
+    (doc as any)
+      .lastAutoTable
+      .finalY + 10;
+
+  const summaryHeight =
+    30;
+
+  /* -----------------------------------------------------
+     SUMMARY CONTAINER
+  ----------------------------------------------------- */
+
+  doc.setFillColor(
+    248,
+    250,
+    252
+  );
+
+  doc.setDrawColor(
+    226,
+    232,
+    240
+  );
+
+  doc.roundedRect(
+    margin,
+    finalY,
+    pageWidth -
+      margin * 2,
+    summaryHeight,
+    3,
+    3,
+    "FD"
+  );
+
+  /* -----------------------------------------------------
+     GROSS PAYROLL
+  ----------------------------------------------------- */
+
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  doc.setFontSize(
+    8
+  );
+
+  doc.setTextColor(
+    slate[0],
+    slate[1],
+    slate[2]
+  );
+
+  doc.text(
+    "GROSS PAYROLL",
+    18,
+    finalY + 9
+  );
+
+  doc.setFontSize(
+    12
+  );
+
+  doc.setTextColor(
+    dark[0],
+    dark[1],
+    dark[2]
+  );
+
+  doc.text(
+    money(
+      grossPayroll
+    ),
+    18,
+    finalY + 20
+  );
+
+  /* -----------------------------------------------------
+     TOTAL DEDUCTIONS
+  ----------------------------------------------------- */
+
+  doc.setFontSize(
+    8
+  );
+
+  doc.setTextColor(
+    slate[0],
+    slate[1],
+    slate[2]
+  );
+
+  doc.text(
+    "TOTAL DEDUCTIONS",
+    105,
+    finalY + 9
+  );
+
+  doc.setFontSize(
+    12
+  );
+
+  doc.setTextColor(
+    red[0],
+    red[1],
+    red[2]
+  );
+
+  doc.text(
+    money(
+      totalDeductions
+    ),
+    105,
+    finalY + 20
+  );
+
+  /* -----------------------------------------------------
+     NET PAYROLL
+  ----------------------------------------------------- */
+
+  doc.setFontSize(
+    8
+  );
+
+  doc.setTextColor(
+    slate[0],
+    slate[1],
+    slate[2]
+  );
+
+  doc.text(
+    "NET PAYROLL",
+    205,
+    finalY + 9
+  );
+
+  doc.setFontSize(
+    12
+  );
+
+  doc.setTextColor(
+    green[0],
+    green[1],
+    green[2]
+  );
+
+  doc.text(
+    money(
+      netPayroll
+    ),
+    205,
+    finalY + 20
+  );
+
+  /* =====================================================
+     SIGNATURE SECTION
+  ===================================================== */
+
+  const signY =
+    finalY + 48;
+
+  doc.setDrawColor(
+    148,
+    163,
+    184
+  );
+
+  /* Prepared By */
+
+  doc.line(
+    18,
+    signY,
+    75,
+    signY
+  );
+
+  doc.setFont(
+    "helvetica",
+    "bold"
+  );
+
+  doc.setFontSize(
+    8
+  );
+
+  doc.setTextColor(
+    slate[0],
+    slate[1],
+    slate[2]
+  );
+
+  doc.text(
+    "PREPARED BY",
+    18,
+    signY + 6
+  );
+
+  /* Finance Manager */
+
+  doc.line(
+    120,
+    signY,
+    177,
+    signY
+  );
+
+  doc.text(
+    "FINANCE MANAGER",
+    120,
+    signY + 6
+  );
+
+  /* CEO Approval */
+
+  doc.line(
+    222,
+    signY,
+    279,
+    signY
+  );
+
+  doc.text(
+    "CEO APPROVAL",
+    222,
+    signY + 6
+  );
+
+  /* =====================================================
+     FOOTER
+  ===================================================== */
+
+  doc.setDrawColor(
+    226,
+    232,
+    240
+  );
+
+  doc.line(
+    10,
+    pageHeight - 12,
+    pageWidth - 10,
+    pageHeight - 12
+  );
+
+  doc.setFont(
+    "helvetica",
+    "normal"
+  );
+
+  doc.setFontSize(
+    7
+  );
+
+  doc.setTextColor(
+    100,
+    116,
+    139
+  );
+
+  doc.text(
+    "IRUKA ERP • Payroll Management System",
+    10,
+    pageHeight - 6
+  );
+
+  doc.text(
+    "Generated automatically",
+    pageWidth / 2,
+    pageHeight - 6,
+    {
+      align:
+        "center",
+    }
+  );
+
+  doc.text(
+    `Page 1`,
+    pageWidth - 10,
+    pageHeight - 6,
+    {
+      align:
+        "right",
+    }
+  );
+
+  /* =====================================================
+     SAVE PDF
+  ===================================================== */
+
+  doc.save(
+    `IRUKA-Payroll-${selectedPayrollMonth}-${selectedPayrollYear}.pdf`
+  );
+}
   /* =====================================================
      PRINT
   ===================================================== */
@@ -1938,15 +2437,15 @@ const selectedMonthPayroll =
                   </th>
 
                   <th className="px-6 py-5 text-left">
-                    Position
-                  </th>
-
-                  <th className="px-6 py-5 text-left">
-                    Bank
-                  </th>
-
-                  <th className="px-6 py-5 text-left">
                     Account No.
+                  </th>
+
+                  <th className="px-6 py-5 text-left">
+                    Bank Name
+                  </th>
+
+                  <th className="px-6 py-5 text-left">
+                    Account Name
                   </th>
 
                   <th className="px-6 py-5 text-right">
@@ -2002,81 +2501,83 @@ const selectedMonthPayroll =
                   filteredPayroll.map(
                     (item) => (
 
-                      <tr
-                        key={
-                          item.id
-                        }
-                        className="border-b hover:bg-slate-50"
-                      >
+<tr
+  key={item.id}
+  onClick={() => openEmployeePayroll(item)}
+  className="border-b hover:bg-blue-50 cursor-pointer transition"
+>
 
-<td className="px-6 py-5">
+                        {/* PHOTO */}
 
-  <div className="h-12 w-12 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center border-2 border-slate-200">
+                        <td className="px-6 py-5">
 
-    {staffByDatabaseId[item.staff_id]?.photo_url ? (
-      <img
-        src={
-          staffByDatabaseId[
-            item.staff_id
-          ]?.photo_url || ""
-        }
-        alt={item.staff_name}
-        className="h-full w-full object-cover"
-      />
-    ) : (
-      <span className="text-xl">
-        👤
-      </span>
-    )}
+                          <div className="h-12 w-12 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center border-2 border-slate-200">
 
-  </div>
+                            {staffByDatabaseId[item.staff_id]?.photo_url ? (
+                              <img
+                                src={
+                                  staffByDatabaseId[
+                                    item.staff_id
+                                  ]?.photo_url || ""
+                                }
+                                alt={item.staff_name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <span className="text-xl">
+                                👤
+                              </span>
+                            )}
 
-</td>
+                          </div>
+
+                        </td>
+
+                        {/* STAFF + STAFF ID */}
 
                         <td className="px-6 py-5">
 
                           <div>
 
-                            <p className="font-bold text-slate-900">
-                              {
-                                item.staff_name
-                              }
-                            </p>
+<p className="font-bold text-slate-900 group-hover:text-blue-800">
+  {item.staff_name}
+</p>
 
-                            <p className="text-sm text-slate-500">
-                              {item.account_name ||
-                                "No account name"}
+                            <p className="text-sm text-blue-700 font-semibold">
+                              {staffByDatabaseId[
+                                item.staff_id
+                              ]?.staff_id || "-"}
                             </p>
 
                           </div>
 
                         </td>
 
-                        <td className="px-6 py-5">
-                          {
-                            item.department
-                          }
-                        </td>
+                        {/* DEPARTMENT */}
 
                         <td className="px-6 py-5">
-                          {
-                            item.position
-                          }
+                          {item.department || "-"}
                         </td>
 
-                        <td className="px-6 py-5">
-                          {
-                            item.bank_name ||
-                            "-"
-                          }
-                        </td>
+                        {/* ACCOUNT NUMBER */}
 
                         <td className="px-6 py-5 font-mono">
-                          {
-                            item.account_number ||
-                            "-"
-                          }
+                          {item.account_number || "-"}
                         </td>
+
+                        {/* BANK NAME */}
+
+                        <td className="px-6 py-5">
+                          {item.bank_name || "-"}
+                        </td>
+
+                        {/* ACCOUNT NAME */}
+
+                        <td className="px-6 py-5">
+                          {item.account_name || "-"}
+                        </td>
+
+                        {/* SALARY */}
 
                         <td className="px-6 py-5 text-right font-semibold">
                           {money(
@@ -2086,11 +2587,15 @@ const selectedMonthPayroll =
                           )}
                         </td>
 
+                        {/* DAYS WORKED */}
+
                         <td className="px-6 py-5 text-center font-semibold">
                           {
                             item.days_worked
                           }
                         </td>
+
+                        {/* SALARY EARNED */}
 
                         <td className="px-6 py-5 text-right font-semibold text-blue-700">
                           {money(
@@ -2100,6 +2605,8 @@ const selectedMonthPayroll =
                           )}
                         </td>
 
+                        {/* DEDUCTION */}
+
                         <td className="px-6 py-5 text-right text-red-600 font-semibold">
                           {money(
                             Number(
@@ -2108,6 +2615,8 @@ const selectedMonthPayroll =
                           )}
                         </td>
 
+                        {/* BALANCE */}
+
                         <td className="px-6 py-5 text-right text-green-700 font-bold">
                           {money(
                             Number(
@@ -2115,6 +2624,8 @@ const selectedMonthPayroll =
                             )
                           )}
                         </td>
+
+                        {/* STATUS */}
 
                         <td className="px-6 py-5 text-center">
 
@@ -2507,11 +3018,15 @@ const selectedMonthPayroll =
                     </th>
 
                     <th className="p-4 text-left">
-                      Bank
+                      Account No.
                     </th>
 
                     <th className="p-4 text-left">
-                      Account No.
+                      Bank Name
+                    </th>
+
+                    <th className="p-4 text-left">
+                      Account Name
                     </th>
 
                     <th className="p-4 text-right">
@@ -2554,28 +3069,43 @@ const selectedMonthPayroll =
                         className="border-b"
                       >
 
+                        {/* STAFF + STAFF ID */}
+
                         <td className="p-4">
 
-                          <p className="font-bold">
+                          <p className="font-bold text-slate-900">
                             {
                               item.staff_name
                             }
                           </p>
 
-                          <p className="text-xs text-slate-500">
-                            {
-                              item.account_name ||
-                              "No account name"
-                            }
+                          <p className="text-xs text-blue-700 font-semibold">
+                            {staffByDatabaseId[
+                              item.staff_id
+                            ]?.staff_id || "-"}
                           </p>
 
                         </td>
 
+                        {/* DEPARTMENT */}
+
                         <td className="p-4">
                           {
-                            item.department
+                            item.department ||
+                            "-"
                           }
                         </td>
+
+                        {/* ACCOUNT NUMBER */}
+
+                        <td className="p-4 font-mono">
+                          {
+                            item.account_number ||
+                            "-"
+                          }
+                        </td>
+
+                        {/* BANK NAME */}
 
                         <td className="p-4">
                           {
@@ -2584,12 +3114,16 @@ const selectedMonthPayroll =
                           }
                         </td>
 
-                        <td className="p-4 font-mono">
+                        {/* ACCOUNT NAME */}
+
+                        <td className="p-4">
                           {
-                            item.account_number ||
+                            item.account_name ||
                             "-"
                           }
                         </td>
+
+                        {/* SALARY */}
 
                         <td className="p-4 text-right">
                           {money(
@@ -2599,11 +3133,15 @@ const selectedMonthPayroll =
                           )}
                         </td>
 
+                        {/* DAYS */}
+
                         <td className="p-4 text-center">
                           {
                             item.days_worked
                           }
                         </td>
+
+                        {/* EARNED */}
 
                         <td className="p-4 text-right">
                           {money(
@@ -2613,6 +3151,8 @@ const selectedMonthPayroll =
                           )}
                         </td>
 
+                        {/* DEDUCTION */}
+
                         <td className="p-4 text-right text-red-600">
                           {money(
                             Number(
@@ -2621,6 +3161,8 @@ const selectedMonthPayroll =
                           )}
                         </td>
 
+                        {/* NET PAY */}
+
                         <td className="p-4 text-right text-green-700 font-bold">
                           {money(
                             Number(
@@ -2628,6 +3170,8 @@ const selectedMonthPayroll =
                             )
                           )}
                         </td>
+
+                        {/* STATUS */}
 
                         <td className="p-4 text-center">
 
@@ -2662,6 +3206,345 @@ const selectedMonthPayroll =
         </div>
 
       )}
+
+      {/* =====================================================
+    EMPLOYEE PAYROLL PROFILE MODAL
+===================================================== */}
+
+{showEmployeePayrollModal &&
+  selectedEmployeePayroll && (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl">
+
+        {/* HEADER */}
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-5">
+
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wider text-blue-700">
+              Employee Payroll Profile
+            </p>
+
+            <h2 className="mt-1 text-2xl font-black text-slate-900">
+              Payroll Information
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setShowEmployeePayrollModal(false)
+            }
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition hover:bg-red-100 hover:text-red-600"
+          >
+            ✕
+          </button>
+
+        </div>
+
+        <div className="p-6">
+
+          {/* EMPLOYEE */}
+          <div className="rounded-3xl bg-slate-900 p-6 text-white">
+
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/20">
+
+                {staff.find(
+                  (s) =>
+                    s.id.toString() ===
+                    selectedEmployeePayroll.staff_id.toString()
+                )?.photo_url ? (
+
+                  <img
+                    src={
+                      staff.find(
+                        (s) =>
+                          s.id.toString() ===
+                          selectedEmployeePayroll.staff_id.toString()
+                      )?.photo_url || ""
+                    }
+                    alt={
+                      selectedEmployeePayroll.staff_name
+                    }
+                    className="h-full w-full object-cover"
+                  />
+
+                ) : (
+
+                  <span className="text-3xl font-black text-white">
+                    {selectedEmployeePayroll.staff_name
+                      .charAt(0)
+                      .toUpperCase()}
+                  </span>
+
+                )}
+
+              </div>
+
+              <div className="flex-1">
+
+                <p className="text-sm font-semibold text-blue-300">
+                  EMPLOYEE
+                </p>
+
+                <h3 className="mt-1 text-3xl font-black">
+                  {selectedEmployeePayroll.staff_name}
+                </h3>
+
+                <div className="mt-3 flex flex-wrap gap-3">
+
+                  <span className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold">
+                    Staff ID:{" "}
+                    {
+                      staff.find(
+                        (s) =>
+                          s.id.toString() ===
+                          selectedEmployeePayroll.staff_id.toString()
+                      )?.staff_id
+                    }
+                  </span>
+
+                  <span className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold">
+                    {
+                      selectedEmployeePayroll.department
+                    }
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          {/* PAYMENT DETAILS */}
+          <div className="mt-6">
+
+            <h3 className="mb-4 text-xl font-black text-slate-900">
+              Payment Details
+            </h3>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-sm font-medium text-slate-500">
+                  Bank Name
+                </p>
+
+                <p className="mt-2 font-black text-slate-900">
+                  {selectedEmployeePayroll.bank_name ||
+                    "Not provided"}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-sm font-medium text-slate-500">
+                  Account Name
+                </p>
+
+                <p className="mt-2 font-black text-slate-900">
+                  {selectedEmployeePayroll.account_name ||
+                    "Not provided"}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-sm font-medium text-slate-500">
+                  Account Number
+                </p>
+
+                <p className="mt-2 font-black text-slate-900">
+                  {selectedEmployeePayroll.account_number ||
+                    "Not provided"}
+                </p>
+              </div>
+
+            </div>
+
+          </div>
+
+
+          {/* PAYROLL DETAILS */}
+          <div className="mt-8">
+
+            <h3 className="mb-4 text-xl font-black text-slate-900">
+              Payroll Details
+            </h3>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
+              <div className="rounded-2xl border border-slate-200 p-5">
+                <p className="text-sm text-slate-500">
+                  Payroll Period
+                </p>
+
+                <p className="mt-2 font-black text-slate-900">
+                  {selectedEmployeePayroll.payroll_month}{" "}
+                  {selectedEmployeePayroll.payroll_year}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-5">
+                <p className="text-sm text-slate-500">
+                  Basic Salary
+                </p>
+
+                <p className="mt-2 font-black text-slate-900">
+                  {money(
+                    selectedEmployeePayroll.basic_salary
+                  )}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-5">
+                <p className="text-sm text-slate-500">
+                  Days Worked
+                </p>
+
+                <p className="mt-2 font-black text-slate-900">
+                  {selectedEmployeePayroll.days_worked}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-5">
+                <p className="text-sm text-slate-500">
+                  Salary Earned
+                </p>
+
+                <p className="mt-2 font-black text-blue-800">
+                  {money(
+                    selectedEmployeePayroll.salary_earned
+                  )}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-5">
+                <p className="text-sm text-slate-500">
+                  Deduction
+                </p>
+
+                <p className="mt-2 font-black text-red-600">
+                  {money(
+                    selectedEmployeePayroll.total_deduction
+                  )}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <p className="text-sm text-emerald-700">
+                  Balance Payable
+                </p>
+
+                <p className="mt-2 text-xl font-black text-emerald-700">
+                  {money(
+                    selectedEmployeePayroll.balance_payable
+                  )}
+                </p>
+              </div>
+
+            </div>
+
+          </div>
+
+
+          {/* PAYMENT STATUS */}
+          <div className="mt-8">
+
+            <h3 className="mb-4 text-xl font-black text-slate-900">
+              Payment Status
+            </h3>
+
+            {selectedEmployeePayroll.payment_status ===
+            "Paid" ? (
+
+              <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6">
+
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+                  <div>
+
+                    <div className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-4 py-2 font-black text-emerald-700">
+                      🟢 PAID
+                    </div>
+
+                    {selectedEmployeePayroll.paid_at && (
+                      <p className="mt-3 text-sm font-semibold text-emerald-700">
+                        Paid on{" "}
+                        {new Date(
+                          selectedEmployeePayroll.paid_at
+                        ).toLocaleString("en-NG", {
+                          timeZone: "Africa/Lagos",
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                          hour12: true,
+                        })}
+                      </p>
+                    )}
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            ) : (
+
+              <div className="rounded-3xl border border-yellow-200 bg-yellow-50 p-6">
+
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+
+                  <div>
+
+                    <div className="inline-flex items-center gap-2 rounded-full bg-yellow-100 px-4 py-2 font-black text-yellow-700">
+                      🟡 READY
+                    </div>
+
+                    <p className="mt-3 text-sm font-medium text-yellow-800">
+                      Salary is ready to be processed.
+                    </p>
+
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      paySalary(
+                        selectedEmployeePayroll.id
+                      )
+                    }
+                    disabled={processingPayment}
+                    className={`rounded-2xl px-6 py-4 font-black text-white shadow-lg transition ${
+                      processingPayment
+                        ? "cursor-not-allowed bg-slate-400"
+                        : "bg-emerald-600 hover:bg-emerald-700"
+                    }`}
+                  >
+                    {processingPayment
+                      ? "Processing..."
+                      : "✓ Mark Salary as Paid"}
+                  </button>
+
+                </div>
+
+              </div>
+
+            )}
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  )}
 
     </ProtectedRoute>
   );

@@ -2370,12 +2370,11 @@ const financeRows =
 
                 {orders.map(
                   (order) => (
-                    <tr
-                      key={
-                        order.id
-                      }
-                      className="border-b border-slate-800 hover:bg-slate-800/60"
-                    >
+<tr
+  key={order.id}
+  onClick={() => router.push(`/orders/${order.id}`)}
+  className="border-b border-slate-800 hover:bg-slate-800/60 cursor-pointer transition-colors"
+>
 
                       <td className="p-4 text-slate-200">
                         {
@@ -2424,17 +2423,16 @@ const financeRows =
                           }
                         </div>
 
-                        <select
-                          value={
-                            order.payment_status ||
-                            "Pending"
-                          }
-                          onChange={(e) =>
-                            updateOrderPayment(
-                              order,
-                              e.target.value
-                            )
-                          }
+<select
+  value={order.payment_status || "Pending"}
+  onClick={(e) => e.stopPropagation()}
+  onChange={(e) => {
+    e.stopPropagation();
+    updateOrderPayment(
+      order,
+      e.target.value
+    );
+  }}
                           className="w-full rounded-xl border border-slate-700 bg-slate-800 text-white px-4 py-2 text-sm"
                         >
 
@@ -2508,14 +2506,14 @@ const financeRows =
                           }
                         </div>
 
-                        <select
-                          value={
-                            order.order_status ||
-                            "Pending"
-                          }
-                          onChange={async (
-                            e
-                          ) => {
+<select
+  value={
+    order.order_status ||
+    "Pending"
+  }
+  onClick={(e) => e.stopPropagation()}
+  onChange={async (e) => {
+    e.stopPropagation();
 
                             const newStatus =
                               e.target.value;
@@ -2681,16 +2679,15 @@ const financeRows =
 
                       <td className="p-4">
 
-                        <button
-                          onClick={() =>
-                            deleteOrder(
-                              order
-                            )
-                          }
-                          className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg"
-                        >
-                          Delete
-                        </button>
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    deleteOrder(order);
+  }}
+  className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg"
+>
+  Delete
+</button>
 
                       </td>
 

@@ -1869,19 +1869,7 @@ const line: [number, number, number] = [226, 232, 240];
     window.print();
   }
 
-  /* =====================================================
-     LOADING
-  ===================================================== */
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <p className="text-xl font-semibold">
-          Loading Payroll...
-        </p>
-      </div>
-    );
-  }
 
   /* =====================================================
      UI

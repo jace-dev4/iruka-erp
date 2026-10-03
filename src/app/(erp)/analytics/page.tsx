@@ -20,7 +20,7 @@ import TopCustomers from "@/components/analytics/TopCustomers";
 type Period = "today" | "week" | "month" | "year";
 
 export default function AnalyticsPage() {
-  const [period, setPeriod] = useState<Period>("today");
+  const [period, setPeriod] = useState<Period>("week");
 
   const [loading, setLoading] = useState(true);
 

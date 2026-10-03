@@ -161,19 +161,15 @@ export default function ProtectedRoute({
 
           </div>
 
-          {/* Title */}
+{/* Title */}
 
-          <h1 className="text-4xl font-black tracking-wide text-white">
+<h1 className="text-4xl font-black tracking-wide text-white">
+  Loading
+</h1>
 
-            Executive Dashboard
-
-          </h1>
-
-          <p className="mt-3 text-lg text-slate-400 animate-pulse">
-
-            Loading...
-
-          </p>
+<p className="mt-3 text-lg text-slate-400 animate-pulse">
+  Please wait...
+</p>
 
           {/* Progress Bar */}
 

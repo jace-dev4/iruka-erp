@@ -1407,13 +1407,26 @@ const filteredStaff = useMemo(() => {
       0
     );
 
-  const totalDebt =
-    debts.reduce(
-      (sum, debt) =>
-        sum +
-        Number(debt.amount),
-      0
+const totalDebt = debts
+  .filter((debt) => {
+    const today = new Date();
+
+    const currentMonth = today.toLocaleString("default", {
+      month: "long",
+    });
+
+    const currentYear = today.getFullYear();
+
+    return (
+      debt.month === currentMonth &&
+      debt.year === currentYear
     );
+  })
+  .reduce(
+    (sum, debt) =>
+      sum + Number(debt.amount),
+    0
+  );
 
   const totalDepartments =
     new Set(

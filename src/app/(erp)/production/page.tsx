@@ -74,8 +74,6 @@ export default function ProductionPage() {
     }).format(new Date());
   };
 
-  const [selectedKpiDate, setSelectedKpiDate] =
-    useState(getLocalDate());
 
       /* =========================
      LIVE CLOCK
@@ -84,17 +82,66 @@ export default function ProductionPage() {
   const [currentTime, setCurrentTime] =
     useState(new Date());
 
-  /* =========================
-     PRODUCTION PERIOD FILTER
-  ========================== */
-
   const [productionPeriod, setProductionPeriod] =
     useState<
-      "Today" |
-      "This Week" |
-      "This Month" |
-      "This Year"
-    >("Today");
+      "Today" | "This Week" | "This Month" | "This Year" | "Custom"
+    >("This Week");
+
+/* =========================
+   PRODUCTION DATE RANGE
+   DEFAULT = CURRENT WEEK
+========================= */
+
+const getWeekStartDate = () => {
+
+  const todayString = getLocalDate();
+
+  const [year, month, day] =
+    todayString.split("-").map(Number);
+
+  const today = new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day
+    )
+  );
+
+  const dayOfWeek =
+    today.getUTCDay();
+
+  /*
+   * Sunday = 0
+   * Monday = 1
+   */
+
+  const daysFromMonday =
+    dayOfWeek === 0
+      ? 6
+      : dayOfWeek - 1;
+
+  today.setUTCDate(
+    today.getUTCDate() -
+    daysFromMonday
+  );
+
+  return [
+    today.getUTCFullYear(),
+    String(
+      today.getUTCMonth() + 1
+    ).padStart(2, "0"),
+    String(
+      today.getUTCDate()
+    ).padStart(2, "0"),
+  ].join("-");
+};
+
+
+const [productionFromDate, setProductionFromDate] =
+  useState(getWeekStartDate());
+
+const [productionToDate, setProductionToDate] =
+  useState(getLocalDate());
 
   /* =========================
      PREMIUM NOTIFICATIONS
@@ -166,6 +213,51 @@ const [editWaste, setEditWaste] =
     setTimeout(() => {
       setNotification(null);
     }, 4500);
+  }
+
+  /* =========================
+     PRODUCTION PERIOD FILTER
+  ========================== */
+
+  function handleProductionPeriodChange(
+    period:
+      | "Today"
+      | "This Week"
+      | "This Month"
+      | "This Year"
+  ) {
+    const today = getLocalDate();
+
+    const [year, month] =
+      today.split("-").map(Number);
+
+    if (period === "Today") {
+      setProductionFromDate(today);
+      setProductionToDate(today);
+    }
+
+    if (period === "This Week") {
+      setProductionFromDate(
+        getWeekStartDate()
+      );
+      setProductionToDate(today);
+    }
+
+    if (period === "This Month") {
+      setProductionFromDate(
+        `${year}-${String(month).padStart(2, "0")}-01`
+      );
+      setProductionToDate(today);
+    }
+
+    if (period === "This Year") {
+      setProductionFromDate(
+        `${year}-01-01`
+      );
+      setProductionToDate(today);
+    }
+
+    setProductionPeriod(period);
   }
 
   /* =========================
@@ -1065,126 +1157,138 @@ quantity_used:
      STORE CONFIRMATION
   ========================== */
 
-  /* =========================
-     PRODUCTION PERIOD FILTER
-  ========================== */
+ 
 
-  function getPeriodStart(
-    period:
-      | "Today"
-      | "This Week"
-      | "This Month"
-      | "This Year"
-  ) {
 
-    const todayString = getLocalDate();
+/* =========================
+   NORMALIZE PRODUCTION DATE
+========================= */
 
-    const [year, month, day] =
-      todayString.split("-").map(Number);
+function getProductionLogDate(
+  log: any
+) {
 
-    const today = new Date(
-      Date.UTC(
-        year,
-        month - 1,
-        day
+  /*
+   * First use production_date
+   */
+
+  if (log.production_date) {
+
+    const value =
+      String(
+        log.production_date
+      );
+
+    /*
+     * Handles:
+     *
+     * 2026-10-03
+     *
+     * and
+     *
+     * 2026-10-03T00:00:00...
+     */
+
+    if (
+      /^\d{4}-\d{2}-\d{2}/.test(
+        value
       )
-    );
+    ) {
 
-    if (period === "Today") {
-
-      return todayString;
-
-    }
-
-    if (period === "This Week") {
-
-      const dayOfWeek =
-        today.getUTCDay();
-
-      /*
-       * Sunday = 0
-       * Monday = 1
-       *
-       * We treat Monday as the
-       * beginning of the production week.
-       */
-
-      const daysFromMonday =
-        dayOfWeek === 0
-          ? 6
-          : dayOfWeek - 1;
-
-      today.setUTCDate(
-        today.getUTCDate() -
-        daysFromMonday
+      return value.slice(
+        0,
+        10
       );
 
     }
 
-    if (period === "This Month") {
-
-      today.setUTCDate(1);
-
-    }
-
-    if (period === "This Year") {
-
-      today.setUTCMonth(0);
-      today.setUTCDate(1);
-
-    }
-
-    return [
-      today.getUTCFullYear(),
-      String(
-        today.getUTCMonth() + 1
-      ).padStart(2, "0"),
-      String(
-        today.getUTCDate()
-      ).padStart(2, "0"),
-    ].join("-");
   }
 
-  const productionPeriodStart =
-    getPeriodStart(
-      productionPeriod
-    );
 
-  const todayForPeriod =
-    getLocalDate();
+  /*
+   * Fallback to created_at
+   * using Lagos timezone.
+   */
 
-  /* =========================
-     FILTER PRODUCTION RECORDS
-  ========================== */
+  if (log.created_at) {
 
-  const periodProductionLogs =
-    productionLogs.filter((log) => {
+    const parts =
+      new Intl.DateTimeFormat(
+        "en-GB",
+        {
+          timeZone:
+            "Africa/Lagos",
+
+          year:
+            "numeric",
+
+          month:
+            "2-digit",
+
+          day:
+            "2-digit",
+        }
+      ).formatToParts(
+        new Date(
+          log.created_at
+        )
+      );
+
+
+    const day =
+      parts.find(
+        (part) =>
+          part.type === "day"
+      )?.value || "";
+
+
+    const month =
+      parts.find(
+        (part) =>
+          part.type === "month"
+      )?.value || "";
+
+
+    const year =
+      parts.find(
+        (part) =>
+          part.type === "year"
+      )?.value || "";
+
+
+    return `${year}-${month}-${day}`;
+  }
+
+
+  return "";
+}
+
+
+/* =========================
+   FILTER PRODUCTION RECORDS
+   CONTROLLED BY DATE RANGE
+========================= */
+
+const periodProductionLogs =
+  productionLogs.filter(
+    (log) => {
 
       const productionDate =
-        log.production_date ||
-        (
-          log.created_at
-            ? new Date(
-                log.created_at
-              ).toLocaleDateString(
-                "en-CA",
-                {
-                  timeZone:
-                    "Africa/Lagos",
-                }
-              )
-            : ""
+        getProductionLogDate(
+          log
         );
 
       return (
         productionDate >=
-          productionPeriodStart &&
+          productionFromDate &&
         productionDate <=
-          todayForPeriod
+          productionToDate
       );
 
-    });
+    }
+  );
 
+  
   /* =========================
      PENDING STORE CONFIRMATION
   ========================== */
@@ -2074,34 +2178,14 @@ if (brownUsedKg > 0) {
 ========================= */
 
 /*
- * Use the selected KPI date.
+ * Use the same production date range that
+ * controls the rest of the page.
  *
- * We primarily use production_date.
- * The created_at fallback protects against
- * timezone/date differences caused by
- * storing dates with toISOString().
+ * This keeps KPI cards, pending confirmations,
+ * and production history synchronized.
  */
 const selectedDateLogs =
-  productionLogs.filter((item) => {
-
-    const productionDate =
-      item.production_date;
-
-    const createdDate = item.created_at
-      ? new Date(item.created_at)
-          .toLocaleDateString(
-            "en-CA",
-            {
-              timeZone: "Africa/Lagos",
-            }
-          )
-      : "";
-
-    return (
-      productionDate === selectedKpiDate ||
-      createdDate === selectedKpiDate
-    );
-  });
+  periodProductionLogs;
 
 /*
  * Normalize confirmation status so that
@@ -2217,22 +2301,34 @@ const totalMissing =
   );
 
   /* =========================
-     SELECTED DATE DISPLAY
+     SELECTED DATE RANGE DISPLAY
   ========================== */
 
-  const selectedDateDisplay =
+  const formatProductionDate = (
+    date: string
+  ) =>
     new Date(
-      `${selectedKpiDate}T00:00:00`
+      `${date}T00:00:00`
     ).toLocaleDateString(
       "en-GB",
       {
         timeZone: "Africa/Lagos",
-        weekday: "long",
         day: "numeric",
-        month: "long",
+        month: "short",
         year: "numeric",
       }
     );
+
+  const selectedDateDisplay =
+    productionFromDate === productionToDate
+      ? formatProductionDate(
+          productionFromDate
+        )
+      : `${formatProductionDate(
+          productionFromDate
+        )} – ${formatProductionDate(
+          productionToDate
+        )}`;
 
   /* =========================
      PRODUCTION HISTORY
@@ -2994,7 +3090,11 @@ const filteredHistory =
 
         <button
           key={period}
-          onClick={() => setProductionPeriod(period)}
+          onClick={() =>
+            handleProductionPeriodChange(
+              period
+            )
+          }
           className={`px-5 py-3 rounded-xl text-sm font-bold transition-all ${
             productionPeriod === period
               ? "bg-yellow-500 text-black shadow-lg shadow-yellow-900/30"
@@ -3069,38 +3169,41 @@ const filteredHistory =
 
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
 
             <label className="text-slate-400 text-sm font-semibold">
-              View Date
+              Date Range
             </label>
 
             <input
               type="date"
-              value={selectedKpiDate}
-              onChange={(e) =>
-                setSelectedKpiDate(
+              value={productionFromDate}
+              max={productionToDate}
+              onChange={(e) => {
+                setProductionFromDate(
                   e.target.value
-                )
-              }
+                );
+                setProductionPeriod("Custom");
+              }}
               className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-yellow-500 transition"
             />
 
-            {selectedKpiDate !==
-              getLocalDate() && (
+            <span className="text-slate-500 text-sm font-bold">
+              to
+            </span>
 
-              <button
-                onClick={() =>
-                  setSelectedKpiDate(
-                    getLocalDate()
-                  )
-                }
-                className="px-4 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-black font-bold transition"
-              >
-                Today
-              </button>
-
-            )}
+            <input
+              type="date"
+              value={productionToDate}
+              min={productionFromDate}
+              onChange={(e) => {
+                setProductionToDate(
+                  e.target.value
+                );
+                setProductionPeriod("Custom");
+              }}
+              className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-yellow-500 transition"
+            />
 
           </div>
 

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -14,27 +13,63 @@ interface InventoryMaterialsProps {
   onInventoryUpdated?: () => Promise<void> | void;
 }
 
+/* =====================================================
+   MATERIAL IMAGES
+===================================================== */
+
+const materialImages: Record<string, string> = {
+  Flour: "/inventory/flour.jpg",
+  Sugar: "/inventory/sugar.jpg",
+  Butter: "/inventory/butter.jpg",
+  Yeast: "/inventory/yeast.jpg",
+  "Groundnut Oil": "/inventory/groundnut-oil.jpg",
+  Tape: "/inventory/tape.jpg",
+  Resins: "/inventory/resins.jpg",
+};
+
 export default function InventoryMaterials({
   inventory,
   isLowStock,
   showNotification,
   onInventoryUpdated,
 }: InventoryMaterialsProps) {
-  const [selectedMaterial, setSelectedMaterial] = useState<any | null>(null);
+  const [selectedMaterial, setSelectedMaterial] =
+    useState<any | null>(null);
 
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] =
+    useState(false);
 
-  const [editName, setEditName] = useState("");
-  const [editQuantity, setEditQuantity] = useState("");
-  const [editUnit, setEditUnit] = useState("");
-  const [editUnitCost, setEditUnitCost] = useState("");
-  const [editReorderLevel, setEditReorderLevel] = useState("");
+  const [editName, setEditName] =
+    useState("");
 
-  const [saving, setSaving] = useState(false);
+  const [editQuantity, setEditQuantity] =
+    useState("");
 
-  /* =========================
-     PREMIUM NOTIFICATION FALLBACK
-  ========================== */
+  const [editUnit, setEditUnit] =
+    useState("");
+
+  const [editUnitCost, setEditUnitCost] =
+    useState("");
+
+  const [editReorderLevel, setEditReorderLevel] =
+    useState("");
+
+  const [saving, setSaving] =
+    useState(false);
+
+  /* =====================================================
+     LAST UPLOAD
+  ===================================================== */
+
+  const [lastUpload, setLastUpload] =
+    useState<any | null>(null);
+
+  const [loadingLastUpload, setLoadingLastUpload] =
+    useState(false);
+
+  /* =====================================================
+     NOTIFICATION
+  ===================================================== */
 
   function notify(
     type: "success" | "error",
@@ -45,9 +80,65 @@ export default function InventoryMaterials({
     }
   }
 
-  /* =========================
-     PRODUCTION INGREDIENTS
-  ========================== */
+  /* =====================================================
+     IMAGE
+  ===================================================== */
+
+  function getMaterialImage(name: string) {
+    return materialImages[name];
+  }
+
+  /* =====================================================
+     MATERIAL GROUP
+  ===================================================== */
+
+  function getMaterialGroup(name: string) {
+    if (
+      [
+        "Flour",
+        "Sugar",
+        "Butter",
+        "Yeast",
+        "Groundnut Oil",
+        "Iruka Recipe",
+        "White Recipe",
+        "Fruits Recipe",
+      ].includes(name)
+    ) {
+      return "Production Ingredient";
+    }
+
+    if (
+      [
+        "Tape",
+        "Twist",
+        "Small Iruka Nylon",
+        "Small Rosy Nylon",
+        "Medium Iruka Nylon",
+        "Medium Rosy Nylon",
+        "Big Smart Nylon",
+        "Classic Iruka Nylon",
+        "Classic Fruits Nylon",
+        "Jumbo Iruka Nylon",
+        "Jumbo Fruits Nylon",
+        "Big Brother Family Nylon",
+      ].includes(name)
+    ) {
+      return "Packaging Material";
+    }
+
+    if (
+      ["Brown", "Resins", "Flavour"].includes(name)
+    ) {
+      return "Bakery Additive";
+    }
+
+    return "Inventory Material";
+  }
+
+  /* =====================================================
+     MATERIAL GROUPS
+  ===================================================== */
 
   const production = inventory.filter((item) =>
     [
@@ -61,10 +152,6 @@ export default function InventoryMaterials({
       "Fruits Recipe",
     ].includes(item.name)
   );
-
-  /* =========================
-     PACKAGING MATERIALS
-  ========================== */
 
   const packaging = inventory.filter((item) =>
     [
@@ -83,17 +170,15 @@ export default function InventoryMaterials({
     ].includes(item.name)
   );
 
-  /* =========================
-     BAKERY ADDITIVES
-  ========================== */
-
   const additives = inventory.filter((item) =>
-    ["Brown", "Resins", "Flavour"].includes(item.name)
+    ["Brown", "Resins", "Flavour"].includes(
+      item.name
+    )
   );
 
-  /* =========================
+  /* =====================================================
      DATE FORMATTER
-  ========================== */
+  ===================================================== */
 
   function formatDate(value: any) {
     if (!value) return "Not available";
@@ -111,78 +196,209 @@ export default function InventoryMaterials({
     });
   }
 
-  /* =========================
-     OPEN MATERIAL
-  ========================== */
+  /* =====================================================
+     NUMBER FORMATTER
+  ===================================================== */
 
-  function openMaterial(item: any) {
+  function formatNumber(value: any) {
+    const number = Number(value ?? 0);
+
+    if (!Number.isFinite(number)) {
+      return "0";
+    }
+
+    return number.toLocaleString("en-NG", {
+      maximumFractionDigits: 2,
+    });
+  }
+
+  /* =====================================================
+     CURRENCY FORMATTER
+  ===================================================== */
+
+  function formatCurrency(value: any) {
+    const number = Number(value ?? 0);
+
+    if (!Number.isFinite(number)) {
+      return "₦0";
+    }
+
+    return `₦${number.toLocaleString("en-NG", {
+      maximumFractionDigits: 2,
+    })}`;
+  }
+
+  /* =====================================================
+     FETCH LAST RECEIVED STOCK
+  ===================================================== */
+
+  async function fetchLastUpload(
+    materialName: string
+  ) {
+    try {
+      setLoadingLastUpload(true);
+      setLastUpload(null);
+
+      const { data, error } = await supabase
+        .from("inventory_transactions")
+        .select(
+          "id, material_name, quantity_used, transaction_type, reference, created_at"
+        )
+        .eq(
+          "material_name",
+          materialName
+        )
+        .eq(
+          "transaction_type",
+          "RECEIVED"
+        )
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error(
+          "Fetch last inventory upload error:",
+          error
+        );
+
+        notify(
+          "error",
+          "Unable to load the latest upload information."
+        );
+
+        return;
+      }
+
+      setLastUpload(data || null);
+    } catch (error) {
+      console.error(
+        "Unexpected last upload error:",
+        error
+      );
+    } finally {
+      setLoadingLastUpload(false);
+    }
+  }
+
+  /* =====================================================
+     OPEN MATERIAL PROFILE
+  ===================================================== */
+
+  async function openMaterial(item: any) {
     setSelectedMaterial(item);
     setIsEditing(false);
 
     setEditName(item.name || "");
-    setEditQuantity(String(item.quantity ?? ""));
+
+    setEditQuantity(
+      String(item.quantity ?? "")
+    );
+
     setEditUnit(item.unit || "");
-    setEditUnitCost(String(item.unit_cost ?? ""));
-    setEditReorderLevel(String(item.reorder_level ?? ""));
+
+    setEditUnitCost(
+      String(item.unit_cost ?? "")
+    );
+
+    setEditReorderLevel(
+      String(item.reorder_level ?? "")
+    );
+
+    await fetchLastUpload(item.name);
   }
 
-  /* =========================
+  /* =====================================================
      START EDITING
-  ========================== */
+  ===================================================== */
 
   function startEditing() {
     if (!selectedMaterial) return;
 
-    setEditName(selectedMaterial.name || "");
+    setEditName(
+      selectedMaterial.name || ""
+    );
+
     setEditQuantity(
-      String(selectedMaterial.quantity ?? "")
+      String(
+        selectedMaterial.quantity ?? ""
+      )
     );
-    setEditUnit(selectedMaterial.unit || "");
+
+    setEditUnit(
+      selectedMaterial.unit || ""
+    );
+
     setEditUnitCost(
-      String(selectedMaterial.unit_cost ?? "")
+      String(
+        selectedMaterial.unit_cost ?? ""
+      )
     );
+
     setEditReorderLevel(
-      String(selectedMaterial.reorder_level ?? "")
+      String(
+        selectedMaterial.reorder_level ?? ""
+      )
     );
 
     setIsEditing(true);
   }
 
-  /* =========================
+  /* =====================================================
      CANCEL EDITING
-  ========================== */
+  ===================================================== */
 
   function cancelEditing() {
     if (!selectedMaterial) return;
 
-    setEditName(selectedMaterial.name || "");
+    setEditName(
+      selectedMaterial.name || ""
+    );
+
     setEditQuantity(
-      String(selectedMaterial.quantity ?? "")
+      String(
+        selectedMaterial.quantity ?? ""
+      )
     );
-    setEditUnit(selectedMaterial.unit || "");
+
+    setEditUnit(
+      selectedMaterial.unit || ""
+    );
+
     setEditUnitCost(
-      String(selectedMaterial.unit_cost ?? "")
+      String(
+        selectedMaterial.unit_cost ?? ""
+      )
     );
+
     setEditReorderLevel(
-      String(selectedMaterial.reorder_level ?? "")
+      String(
+        selectedMaterial.reorder_level ?? ""
+      )
     );
 
     setIsEditing(false);
   }
 
-  /* =========================
+  /* =====================================================
      SAVE MATERIAL
-  ========================== */
+  ===================================================== */
 
   async function saveMaterial() {
     if (!selectedMaterial || saving) {
       return;
     }
 
-    const trimmedName = editName.trim();
-    const trimmedUnit = editUnit.trim();
+    const trimmedName =
+      editName.trim();
 
-    const quantity = Number(editQuantity);
+    const trimmedUnit =
+      editUnit.trim();
+
+    const quantity =
+      Number(editQuantity);
 
     const unitCost =
       editUnitCost.trim() === ""
@@ -193,10 +409,6 @@ export default function InventoryMaterials({
       editReorderLevel.trim() === ""
         ? 0
         : Number(editReorderLevel);
-
-    /* =========================
-       VALIDATION
-    ========================== */
 
     if (!trimmedName) {
       notify(
@@ -247,18 +459,16 @@ export default function InventoryMaterials({
       return;
     }
 
-    /* =========================
-       CHECK DUPLICATE NAME
-    ========================== */
-
-    const duplicate = inventory.find(
-      (item) =>
-        item.id !== selectedMaterial.id &&
-        String(item.name)
-          .trim()
-          .toLowerCase() ===
-          trimmedName.toLowerCase()
-    );
+    const duplicate =
+      inventory.find(
+        (item) =>
+          item.id !==
+            selectedMaterial.id &&
+          String(item.name)
+            .trim()
+            .toLowerCase() ===
+            trimmedName.toLowerCase()
+      );
 
     if (duplicate) {
       notify(
@@ -271,22 +481,25 @@ export default function InventoryMaterials({
     try {
       setSaving(true);
 
-      /* =========================
-         UPDATE DATABASE
-      ========================== */
-
-      const { data, error } = await supabase
-        .from("inventory")
-        .update({
-          name: trimmedName,
-          quantity,
-          unit: trimmedUnit,
-          unit_cost: unitCost,
-          reorder_level: Math.round(reorderLevel),
-        })
-        .eq("id", selectedMaterial.id)
-        .select()
-        .single();
+      const { data, error } =
+        await supabase
+          .from("inventory")
+          .update({
+            name: trimmedName,
+            quantity,
+            unit: trimmedUnit,
+            unit_cost: unitCost,
+            reorder_level:
+              Math.round(
+                reorderLevel
+              ),
+          })
+          .eq(
+            "id",
+            selectedMaterial.id
+          )
+          .select()
+          .single();
 
       if (error) {
         throw error;
@@ -298,45 +511,45 @@ export default function InventoryMaterials({
         );
       }
 
-      /* =========================
-         UPDATE MODAL
-      ========================== */
-
       setSelectedMaterial(data);
 
-      setEditName(data.name || "");
+      setEditName(
+        data.name || ""
+      );
+
       setEditQuantity(
         String(data.quantity ?? "")
       );
-      setEditUnit(data.unit || "");
+
+      setEditUnit(
+        data.unit || ""
+      );
+
       setEditUnitCost(
         String(data.unit_cost ?? "")
       );
+
       setEditReorderLevel(
-        String(data.reorder_level ?? "")
+        String(
+          data.reorder_level ?? ""
+        )
       );
 
       setIsEditing(false);
 
-      /* =========================
-         REFRESH PARENT INVENTORY
-      ========================== */
+      await fetchLastUpload(
+        data.name
+      );
 
       if (onInventoryUpdated) {
         await onInventoryUpdated();
       }
 
-      /* =========================
-         SUCCESS NOTIFICATION
-      ========================== */
-
       notify(
         "success",
         `${data.name} was updated successfully.`
       );
-
     } catch (error: any) {
-
       console.error(
         "Update inventory material error:",
         error
@@ -347,15 +560,26 @@ export default function InventoryMaterials({
         error?.message ||
           "Unable to update inventory material."
       );
-
     } finally {
       setSaving(false);
     }
   }
 
-  /* =========================
-     SECTION COMPONENT
-  ========================== */
+  /* =====================================================
+     CLOSE PROFILE
+  ===================================================== */
+
+  function closeMaterial() {
+    if (saving) return;
+
+    setSelectedMaterial(null);
+    setIsEditing(false);
+    setLastUpload(null);
+  }
+
+  /* =====================================================
+     SECTION
+  ===================================================== */
 
   function Section(
     title: string,
@@ -363,134 +587,274 @@ export default function InventoryMaterials({
     items: any[]
   ) {
     return (
-      <div className="mb-10">
+      <div className="mb-11 last:mb-0">
 
-        <div className="mb-6 flex items-center gap-3">
+        {/* SECTION HEADER */}
 
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-xl shadow-lg">
-            {icon}
+        <div className="mb-5 flex items-center justify-between">
+
+          <div className="flex items-center gap-3">
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-500/10 text-xl shadow-lg">
+              {icon}
+            </div>
+
+            <div>
+
+              <h2 className="text-2xl font-black tracking-tight text-white">
+                {title}
+              </h2>
+
+              <p className="mt-0.5 text-xs text-slate-500">
+                Manage and monitor inventory
+                materials
+              </p>
+
+            </div>
+
           </div>
 
-          <h2 className="text-2xl font-black text-white">
-            {title}
-          </h2>
+          <span className="rounded-full border border-slate-700 bg-slate-800/80 px-3.5 py-1.5 text-xs font-bold text-slate-400">
+            {items.length}{" "}
+            {items.length === 1
+              ? "item"
+              : "items"}
+          </span>
 
         </div>
 
         {items.length === 0 ? (
 
-          <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-6 text-center text-slate-400">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center text-sm text-slate-500">
             No materials available.
           </div>
 
         ) : (
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
 
-            {items.map((item) => (
+            {items.map((item) => {
 
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => openMaterial(item)}
-                className="group overflow-hidden rounded-3xl border border-slate-700 bg-slate-800 text-left shadow-xl transition-all duration-300 hover:-translate-y-1 hover:border-amber-400 hover:shadow-amber-950/30 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
-              >
+              const image =
+                getMaterialImage(
+                  item.name
+                );
 
-                <div className="h-1 bg-gradient-to-r from-amber-400 via-yellow-500 to-orange-500" />
+              const lowStock =
+                isLowStock(item);
 
-                <div className="p-6">
+              return (
 
-                  <div className="flex items-start justify-between">
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() =>
+                    openMaterial(item)
+                  }
+                  className="group overflow-hidden rounded-[22px] border border-white/10 bg-gradient-to-b from-slate-800/95 to-slate-900 text-left shadow-[0_18px_45px_rgba(0,0,0,0.28)] transition-all duration-300 hover:-translate-y-1 hover:border-amber-400/50 hover:shadow-[0_24px_55px_rgba(0,0,0,0.42)] focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                >
 
-                    <div>
+                  {/* TOP ACCENT */}
 
-                      <h3 className="text-xl font-black text-white">
-                        {item.name}
-                      </h3>
+                  <div className="h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400" />
 
-                      <p className="mt-1 text-sm text-slate-400">
-                        {item.unit || "Unit not set"}
+                  {/* IMAGE */}
+
+                  <div className="relative h-48 overflow-hidden bg-slate-950">
+
+                    {image ? (
+
+                      <img
+                        src={image}
+                        alt={item.name}
+                        loading="lazy"
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
+
+                    ) : (
+
+                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950">
+
+                        <div className="text-center">
+
+                          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800 text-3xl shadow-xl">
+                            📦
+                          </div>
+
+                          <p className="mt-3 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                            Photo not added
+                          </p>
+
+                        </div>
+
+                      </div>
+
+                    )}
+
+                    {/* IMAGE OVERLAY */}
+
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/10 to-transparent" />
+
+                    {/* STATUS */}
+
+                    <div className="absolute right-4 top-4">
+
+                      {lowStock ? (
+
+                        <span className="rounded-full border border-red-400/30 bg-red-500/90 px-3 py-1.5 text-[10px] font-black tracking-wide text-white shadow-lg backdrop-blur-md">
+                          LOW STOCK
+                        </span>
+
+                      ) : (
+
+                        <span className="rounded-full border border-emerald-400/30 bg-emerald-500/90 px-3 py-1.5 text-[10px] font-black tracking-wide text-white shadow-lg backdrop-blur-md">
+                          HEALTHY
+                        </span>
+
+                      )}
+
+                    </div>
+
+                    {/* CATEGORY */}
+
+                    <div className="absolute bottom-4 left-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-300">
+                        {getMaterialGroup(
+                          item.name
+                        )}
                       </p>
 
                     </div>
 
-                    {isLowStock(item) ? (
-
-                      <span className="rounded-full border border-red-500/30 bg-red-500/20 px-3 py-1 text-xs font-bold text-red-400">
-                        LOW
-                      </span>
-
-                    ) : (
-
-                      <span className="rounded-full border border-green-500/30 bg-green-500/20 px-3 py-1 text-xs font-bold text-green-400">
-                        HEALTHY
-                      </span>
-
-                    )}
-
                   </div>
 
-                  <div className="mt-8">
+                  {/* CARD BODY */}
 
-                    <p className="text-5xl font-black text-amber-300">
-                      {Number(
-                        item.quantity || 0
-                      ).toLocaleString()}
-                    </p>
+                  <div className="p-5">
 
-                  </div>
+                    <div className="flex items-start justify-between gap-4">
 
-                  <div className="mt-6">
+                      <div className="min-w-0">
 
-                    <div className="mb-2 flex justify-between text-xs text-slate-400">
+                        <h3 className="truncate text-lg font-black text-white">
+                          {item.name}
+                        </h3>
 
-                      <span>
-                        Inventory Level
-                      </span>
+                        <p className="mt-1 text-xs font-medium text-slate-500">
+                          {item.unit ||
+                            "Unit not set"}
+                        </p>
 
-                      <span>
-                        {isLowStock(item)
-                          ? "Needs Restock"
-                          : "Healthy"}
+                      </div>
+
+                      <span className="shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 font-mono text-[10px] text-slate-500">
+                        #{item.id}
                       </span>
 
                     </div>
 
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-700">
+                    {/* STOCK */}
 
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          isLowStock(item)
-                            ? "w-1/4 bg-red-500"
-                            : "w-full bg-gradient-to-r from-green-400 to-emerald-500"
-                        }`}
-                      />
+                    <div className="mt-5 flex items-end justify-between">
+
+                      <div>
+
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                          Current Stock
+                        </p>
+
+                        <div className="mt-1 flex items-baseline gap-2">
+
+                          <p className="text-4xl font-black tracking-tight text-amber-300">
+                            {formatNumber(
+                              item.quantity
+                            )}
+                          </p>
+
+                          <span className="text-xs font-bold text-slate-500">
+                            {item.unit ||
+                              ""}
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                      <div className="text-right">
+
+                        <p className="text-[10px] font-medium text-slate-600">
+                          Reorder
+                        </p>
+
+                        <p className="mt-1 text-xs font-bold text-slate-400">
+                          {formatNumber(
+                            item.reorder_level
+                          )}
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                    {/* LEVEL */}
+
+                    <div className="mt-4">
+
+                      <div className="mb-2 flex items-center justify-between">
+
+                        <span className="text-[10px] font-medium text-slate-600">
+                          Inventory Level
+                        </span>
+
+                        <span
+                          className={`text-[10px] font-bold ${
+                            lowStock
+                              ? "text-red-400"
+                              : "text-emerald-400"
+                          }`}
+                        >
+                          {lowStock
+                            ? "Needs Restock"
+                            : "Healthy"}
+                        </span>
+
+                      </div>
+
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-700">
+
+                        <div
+                          className={`h-full rounded-full ${
+                            lowStock
+                              ? "w-1/4 bg-red-500"
+                              : "w-full bg-gradient-to-r from-emerald-400 to-green-500"
+                          }`}
+                        />
+
+                      </div>
+
+                    </div>
+
+                    {/* FOOTER */}
+
+                    <div className="mt-5 flex items-center justify-between border-t border-white/5 pt-4">
+
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        Material Profile
+                      </span>
+
+                      <span className="flex items-center gap-1 text-xs font-black text-slate-500 transition-all group-hover:translate-x-1 group-hover:text-amber-300">
+                        View Details
+                        <span>→</span>
+                      </span>
 
                     </div>
 
                   </div>
 
-                  <div className="mt-6 flex items-center justify-between border-t border-slate-700 pt-4">
-
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Material ID
-                    </span>
-
-                    <span className="max-w-[160px] truncate font-mono text-xs text-amber-300">
-                      {item.id}
-                    </span>
-
-                  </div>
-
-                  <div className="mt-3 text-center text-xs font-bold uppercase tracking-wider text-slate-500 transition group-hover:text-amber-300">
-                    Click to view material details →
-                  </div>
-
-                </div>
-
-              </button>
-
-            ))}
+                </button>
+              );
+            })}
 
           </div>
 
@@ -503,11 +867,11 @@ export default function InventoryMaterials({
   return (
     <>
 
-      {/* =========================
+      {/* =====================================================
           INVENTORY MATERIALS
-      ========================== */}
+      ===================================================== */}
 
-      <div className="rounded-3xl border border-slate-700 bg-slate-900 p-8 shadow-2xl">
+      <div className="rounded-[30px] border border-white/10 bg-slate-950/70 p-6 shadow-[0_25px_70px_rgba(0,0,0,0.35)] lg:p-7">
 
         {Section(
           "Production Ingredients",
@@ -529,80 +893,202 @@ export default function InventoryMaterials({
 
       </div>
 
-      {/* =========================
-          MATERIAL DETAILS MODAL
-      ========================== */}
+      {/* =====================================================
+          MATERIAL PROFILE MODAL
+      ===================================================== */}
 
       {selectedMaterial && (
 
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md"
-          onClick={() => {
-            if (!saving) {
-              setSelectedMaterial(null);
-              setIsEditing(false);
-            }
-          }}
+          className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-md sm:p-6"
+          onClick={closeMaterial}
         >
 
           <div
-            className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl"
+            className="relative my-auto max-h-[calc(100vh-2rem)] w-full max-w-5xl overflow-y-auto overflow-x-hidden rounded-[30px] border border-slate-700 bg-slate-900 shadow-[0_35px_100px_rgba(0,0,0,0.55)]"
             onClick={(e) =>
               e.stopPropagation()
             }
           >
 
-            <div className="h-1.5 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400" />
+            {/* =================================================
+                HEADER
+            ================================================= */}
 
-            <div className="p-7 lg:p-9">
+            <div className="relative overflow-hidden bg-gradient-to-r from-amber-700 via-orange-800 to-slate-950 p-7 text-white lg:p-8">
 
-              {/* HEADER */}
+              <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-amber-400/10 blur-3xl" />
 
-              <div className="flex items-start justify-between gap-4">
+              <div className="relative flex flex-col gap-6 md:flex-row md:items-center">
 
-                <div>
+                {/* IMAGE */}
 
-                  <span className="inline-flex items-center rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-amber-300">
-                    Inventory Material
-                  </span>
+                <div className="h-40 w-40 shrink-0 overflow-hidden rounded-3xl border-4 border-white/10 bg-white/10 shadow-2xl">
 
-                  <h2 className="mt-4 text-3xl font-black text-white lg:text-4xl">
+                  {getMaterialImage(
+                    selectedMaterial.name
+                  ) ? (
+
+                    <img
+                      src={getMaterialImage(
+                        selectedMaterial.name
+                      )}
+                      alt={selectedMaterial.name}
+                      className="h-full w-full object-cover"
+                    />
+
+                  ) : (
+
+                    <div className="flex h-full w-full items-center justify-center bg-slate-900/60">
+
+                      <div className="text-center">
+
+                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-3xl">
+                          📦
+                        </div>
+
+                        <p className="mt-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                          No Photo
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                  )}
+
+                </div>
+
+                {/* IDENTITY */}
+
+                <div className="min-w-0 flex-1">
+
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-200">
+                    {getMaterialGroup(
+                      selectedMaterial.name
+                    )}
+                  </p>
+
+                  <h2 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
                     {selectedMaterial.name}
                   </h2>
 
-                  <p className="mt-2 text-sm text-slate-400">
-                    {isEditing
-                      ? "Update the material information and inventory settings."
-                      : "Detailed material information and inventory status."}
-                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+
+                    <span
+                      className={`rounded-full px-4 py-2 text-xs font-black ${
+                        isLowStock(
+                          selectedMaterial
+                        )
+                          ? "bg-red-500 text-white"
+                          : "bg-emerald-500 text-white"
+                      }`}
+                    >
+                      {isLowStock(
+                        selectedMaterial
+                      )
+                        ? "LOW STOCK"
+                        : "HEALTHY"}
+                    </span>
+
+                    <span className="rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-amber-100">
+                      {selectedMaterial.unit ||
+                        "Unit not set"}
+                    </span>
+
+                  </div>
+
+                  <div className="mt-6 grid grid-cols-2 gap-5 sm:grid-cols-3">
+
+                    <div>
+
+                      <p className="text-[10px] uppercase tracking-wider text-amber-200/60">
+                        Material ID
+                      </p>
+
+                      <p className="mt-1 truncate font-mono text-sm font-bold text-white">
+                        {selectedMaterial.id}
+                      </p>
+
+                    </div>
+
+                    <div>
+
+                      <p className="text-[10px] uppercase tracking-wider text-amber-200/60">
+                        Current Stock
+                      </p>
+
+                      <p className="mt-1 text-sm font-black text-white">
+                        {formatNumber(
+                          selectedMaterial.quantity
+                        )}{" "}
+                        {selectedMaterial.unit ||
+                          ""}
+                      </p>
+
+                    </div>
+
+                    <div>
+
+                      <p className="text-[10px] uppercase tracking-wider text-amber-200/60">
+                        Date Added
+                      </p>
+
+                      <p className="mt-1 text-sm font-bold text-white">
+                        {formatDate(
+                          selectedMaterial.created_at
+                        )}
+                      </p>
+
+                    </div>
+
+                  </div>
 
                 </div>
+
+                {/* CLOSE */}
 
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() => {
-                    setSelectedMaterial(null);
-                    setIsEditing(false);
-                  }}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-xl text-slate-400 transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={closeMaterial}
+                  aria-label="Close material profile"
+                  className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-xl text-white/70 transition hover:bg-red-500/20 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50 md:relative md:right-auto md:top-auto"
                 >
                   ×
                 </button>
 
               </div>
 
-              {isEditing ? (
+            </div>
 
-                /* =========================
-                   EDIT FORM
-                ========================== */
+            {/* =================================================
+                EDIT MODE
+            ================================================= */}
 
-                <div className="mt-8 space-y-5">
+            {isEditing ? (
 
-                  <div>
+              <div className="p-6 lg:p-8">
 
-                    <label className="mb-2 block text-sm font-bold text-slate-300">
+                <div className="mb-7">
+
+                  <h3 className="text-2xl font-black text-white">
+                    Edit Material
+                  </h3>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Update the material record in the ERP inventory database.
+                  </p>
+
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+                  {/* NAME */}
+
+                  <div className="md:col-span-2">
+
+                    <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">
                       Material Name
                     </label>
 
@@ -610,18 +1096,22 @@ export default function InventoryMaterials({
                       type="text"
                       value={editName}
                       onChange={(e) =>
-                        setEditName(e.target.value)
+                        setEditName(
+                          e.target.value
+                        )
                       }
                       disabled={saving}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-5 py-4 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 disabled:opacity-60"
                     />
 
                   </div>
 
+                  {/* QUANTITY */}
+
                   <div>
 
-                    <label className="mb-2 block text-sm font-bold text-slate-300">
-                      Quantity
+                    <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">
+                      Current Quantity
                     </label>
 
                     <input
@@ -635,14 +1125,16 @@ export default function InventoryMaterials({
                         )
                       }
                       disabled={saving}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-5 py-4 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 disabled:opacity-60"
                     />
 
                   </div>
 
+                  {/* UNIT */}
+
                   <div>
 
-                    <label className="mb-2 block text-sm font-bold text-slate-300">
+                    <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">
                       Unit
                     </label>
 
@@ -650,18 +1142,22 @@ export default function InventoryMaterials({
                       type="text"
                       value={editUnit}
                       onChange={(e) =>
-                        setEditUnit(e.target.value)
+                        setEditUnit(
+                          e.target.value
+                        )
                       }
                       disabled={saving}
-                      placeholder="e.g. bags, cartons, kg, packs"
-                      className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      placeholder="bags, cartons, kg, packs..."
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-5 py-4 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 disabled:opacity-60"
                     />
 
                   </div>
 
+                  {/* UNIT COST */}
+
                   <div>
 
-                    <label className="mb-2 block text-sm font-bold text-slate-300">
+                    <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">
                       Unit Cost
                     </label>
 
@@ -676,14 +1172,16 @@ export default function InventoryMaterials({
                         )
                       }
                       disabled={saving}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-5 py-4 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 disabled:opacity-60"
                     />
 
                   </div>
 
+                  {/* REORDER LEVEL */}
+
                   <div>
 
-                    <label className="mb-2 block text-sm font-bold text-slate-300">
+                    <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">
                       Reorder Level
                     </label>
 
@@ -698,288 +1196,498 @@ export default function InventoryMaterials({
                         )
                       }
                       disabled={saving}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-5 py-4 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/10 disabled:opacity-60"
                     />
-
-                  </div>
-
-                  {/* EDIT ACTIONS */}
-
-                  <div className="mt-8 grid grid-cols-2 gap-3">
-
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={cancelEditing}
-                      className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-3.5 font-bold text-white transition hover:border-slate-500 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={saveMaterial}
-                      className="rounded-xl bg-amber-500 px-5 py-3.5 font-black text-slate-950 shadow-lg shadow-amber-950/20 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {saving ? (
-                        <span className="flex items-center justify-center gap-2">
-
-                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950/30 border-t-slate-950" />
-
-                          Saving...
-
-                        </span>
-                      ) : (
-                        "Save Changes"
-                      )}
-                    </button>
 
                   </div>
 
                 </div>
 
-              ) : (
+                {/* ACTIONS */}
 
-                /* =========================
-                   VIEW MODE
-                ========================== */
+                <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 
-                <>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={cancelEditing}
+                    className="rounded-2xl border border-slate-700 bg-slate-800 px-7 py-3.5 font-bold text-white transition hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
 
-                  {/* MAIN STOCK */}
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={saveMaterial}
+                    className="rounded-2xl bg-amber-500 px-7 py-3.5 font-black text-slate-950 shadow-lg transition hover:bg-amber-400 disabled:opacity-50"
+                  >
+                    {saving ? (
 
-                  <div className="mt-8 grid gap-4 sm:grid-cols-2">
+                      <span className="flex items-center gap-2">
+
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950/30 border-t-slate-950" />
+
+                        Saving...
+
+                      </span>
+
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </button>
+
+                </div>
+
+              </div>
+
+            ) : (
+
+              /* =================================================
+                 VIEW MODE
+              ================================================= */
+
+              <div className="p-6 lg:p-8">
+
+                {/* STOCK OVERVIEW */}
+
+                <div>
+
+                  <div className="mb-5">
+
+                    <h3 className="text-2xl font-black text-white">
+                      Stock Overview
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Current inventory position and latest stock movement.
+                    </p>
+
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+                    {/* CURRENT */}
 
                     <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-5">
 
-                      <p className="text-xs font-bold uppercase tracking-wider text-amber-300/70">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-amber-300/70">
                         Current Stock
                       </p>
 
-                      <p className="mt-2 text-4xl font-black text-amber-300">
-                        {Number(
-                          selectedMaterial.quantity || 0
-                        ).toLocaleString()}
+                      <p className="mt-2 text-3xl font-black text-amber-300">
+                        {formatNumber(
+                          selectedMaterial.quantity
+                        )}
                       </p>
 
-                      <p className="mt-1 text-sm text-slate-400">
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
                         {selectedMaterial.unit ||
-                          "Unit not set"}
+                          "Unit"}
                       </p>
 
                     </div>
 
-                    <div
-                      className={`rounded-2xl border p-5 ${
-                        isLowStock(selectedMaterial)
-                          ? "border-red-400/20 bg-red-500/10"
-                          : "border-emerald-400/20 bg-emerald-500/10"
-                      }`}
-                    >
+                    {/* LAST UPLOAD */}
 
-                      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Stock Status
+                    <div className="rounded-2xl border border-blue-400/20 bg-blue-500/10 p-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-wider text-blue-300/70">
+                        Last Uploaded
                       </p>
 
-                      <p
-                        className={`mt-2 text-2xl font-black ${
-                          isLowStock(
-                            selectedMaterial
-                          )
-                            ? "text-red-300"
-                            : "text-emerald-300"
-                        }`}
-                      >
-                        {isLowStock(
-                          selectedMaterial
-                        )
-                          ? "LOW STOCK"
-                          : "HEALTHY"}
+                      {loadingLastUpload ? (
+
+                        <div className="mt-3 flex items-center gap-2">
+
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-300/20 border-t-blue-300" />
+
+                          <span className="text-sm text-slate-400">
+                            Loading...
+                          </span>
+
+                        </div>
+
+                      ) : (
+
+                        <>
+
+                          <p className="mt-2 text-3xl font-black text-blue-300">
+                            {lastUpload
+                              ? formatNumber(
+                                  lastUpload.quantity_used
+                                )
+                              : "—"}
+                          </p>
+
+                          <p className="mt-1 text-xs font-semibold text-slate-500">
+                            {selectedMaterial.unit ||
+                              "Unit"}
+                          </p>
+
+                        </>
+
+                      )}
+
+                    </div>
+
+                    {/* COST */}
+
+                    <div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                        Unit Cost
                       </p>
 
-                      <p className="mt-1 text-sm text-slate-400">
-                        {isLowStock(
-                          selectedMaterial
-                        )
-                          ? "Restock recommended"
-                          : "Stock level is healthy"}
+                      <p className="mt-2 text-2xl font-black text-white">
+                        {formatCurrency(
+                          selectedMaterial.unit_cost
+                        )}
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        Per unit
+                      </p>
+
+                    </div>
+
+                    {/* REORDER */}
+
+                    <div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                        Reorder Level
+                      </p>
+
+                      <p className="mt-2 text-3xl font-black text-white">
+                        {formatNumber(
+                          selectedMaterial.reorder_level
+                        )}
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        {selectedMaterial.unit ||
+                          "Unit"}
                       </p>
 
                     </div>
 
                   </div>
 
-                  {/* INFORMATION */}
+                </div>
 
-                  <div className="mt-6 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950/60">
+                {/* LAST UPLOAD */}
 
-                    <div className="border-b border-slate-700 px-5 py-4">
+                <div className="mt-8 rounded-3xl border border-blue-400/20 bg-gradient-to-br from-blue-500/10 via-slate-900 to-slate-950 p-6">
 
-                      <h3 className="font-black text-white">
-                        Material Information
-                      </h3>
+                  <div className="flex items-center justify-between">
+
+                    <div className="flex items-center gap-3">
+
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/10 text-xl">
+                        📥
+                      </div>
+
+                      <div>
+
+                        <h3 className="text-xl font-black text-white">
+                          Last Stock Upload
+                        </h3>
+
+                        <p className="text-xs text-slate-500">
+                          Most recent RECEIVED transaction
+                        </p>
+
+                      </div>
 
                     </div>
 
-                    <div className="divide-y divide-slate-800">
+                    {lastUpload && (
 
-                      <div className="flex items-center justify-between gap-4 px-5 py-4">
+                      <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-black text-emerald-300">
+                        RECEIVED
+                      </span>
 
-                        <span className="text-sm text-slate-400">
-                          Material ID
-                        </span>
+                    )}
 
-                        <span className="max-w-[250px] truncate rounded-lg bg-slate-800 px-3 py-1.5 font-mono text-xs text-amber-300">
-                          {selectedMaterial.id}
-                        </span>
+                  </div>
 
-                      </div>
+                  {loadingLastUpload ? (
 
-                      <div className="flex items-center justify-between gap-4 px-5 py-4">
+                    <div className="mt-6 flex justify-center rounded-2xl border border-slate-800 bg-slate-950/50 p-8">
 
-                        <span className="text-sm text-slate-400">
-                          Material Name
-                        </span>
+                      <div className="flex items-center gap-3 text-sm text-slate-500">
 
-                        <span className="font-bold text-white">
-                          {selectedMaterial.name}
-                        </span>
+                        <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-blue-400" />
+
+                        Loading latest upload...
 
                       </div>
 
-                      <div className="flex items-center justify-between gap-4 px-5 py-4">
+                    </div>
 
-                        <span className="text-sm text-slate-400">
-                          Unit
-                        </span>
+                  ) : lastUpload ? (
 
-                        <span className="font-bold text-white">
-                          {selectedMaterial.unit ||
-                            "Not set"}
-                        </span>
+                    <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
 
-                      </div>
+                      <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
 
-                      <div className="flex items-center justify-between gap-4 px-5 py-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                          Uploaded Quantity
+                        </p>
 
-                        <span className="text-sm text-slate-400">
-                          Quantity
-                        </span>
-
-                        <span className="font-black text-amber-300">
-                          {Number(
-                            selectedMaterial.quantity ||
-                              0
-                          ).toLocaleString()}{" "}
-                          {selectedMaterial.unit ||
-                            ""}
-                        </span>
+                        <p className="mt-2 text-2xl font-black text-blue-300">
+                          {formatNumber(
+                            lastUpload.quantity_used
+                          )}{" "}
+                          <span className="text-sm text-slate-500">
+                            {selectedMaterial.unit ||
+                              ""}
+                          </span>
+                        </p>
 
                       </div>
 
-                      <div className="flex items-center justify-between gap-4 px-5 py-4">
+                      <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
 
-                        <span className="text-sm text-slate-400">
-                          Unit Cost
-                        </span>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                          Uploaded On
+                        </p>
 
-                        <span className="font-bold text-white">
-                          ₦
-                          {Number(
-                            selectedMaterial.unit_cost ||
-                              0
-                          ).toLocaleString(
-                            "en-NG"
-                          )}
-                        </span>
-
-                      </div>
-
-                      <div className="flex items-center justify-between gap-4 px-5 py-4">
-
-                        <span className="text-sm text-slate-400">
-                          Reorder Level
-                        </span>
-
-                        <span className="font-bold text-white">
-                          {Number(
-                            selectedMaterial.reorder_level ||
-                              0
-                          ).toLocaleString()}{" "}
-                          {selectedMaterial.unit ||
-                            ""}
-                        </span>
-
-                      </div>
-
-                      <div className="flex items-center justify-between gap-4 px-5 py-4">
-
-                        <span className="text-sm text-slate-400">
-                          Date Added
-                        </span>
-
-                        <span className="text-right text-sm font-semibold text-white">
+                        <p className="mt-2 text-sm font-bold leading-6 text-white">
                           {formatDate(
-                            selectedMaterial.created_at
+                            lastUpload.created_at
                           )}
-                        </span>
+                        </p>
+
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                          Reference
+                        </p>
+
+                        <p className="mt-2 text-sm font-bold text-white">
+                          {lastUpload.reference ||
+                            "No reference"}
+                        </p>
 
                       </div>
 
                     </div>
 
-                  </div>
+                  ) : (
 
-                  {/* SYSTEM REFERENCE */}
+                    <div className="mt-6 rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-7 text-center">
 
-                  <div className="mt-6 rounded-2xl border border-blue-400/20 bg-blue-500/5 p-5">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-xl">
+                        📦
+                      </div>
 
-                    <p className="text-xs font-bold uppercase tracking-wider text-blue-300">
-                      System Reference
+                      <p className="mt-3 text-sm font-bold text-slate-400">
+                        No stock upload history found
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-600">
+                        No RECEIVED transaction exists for this material yet.
+                      </p>
+
+                    </div>
+
+                  )}
+
+                </div>
+
+                {/* MATERIAL INFORMATION */}
+
+                <div className="mt-8">
+
+                  <div className="mb-5">
+
+                    <h3 className="text-2xl font-black text-white">
+                      Material Information
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Complete information stored for this material.
                     </p>
-
-                    <p className="mt-2 break-all font-mono text-sm text-slate-300">
-                      {selectedMaterial.id}
-                    </p>
-
-                    <p className="mt-2 text-xs leading-5 text-slate-500">
-                      This unique ID identifies this material
-                      record in the ERP database.
-                    </p>
-
-                  </div>
-
-                  {/* VIEW ACTIONS */}
-
-                  <div className="mt-6 grid grid-cols-2 gap-3">
-
-                    <button
-                      type="button"
-                      onClick={startEditing}
-                      className="rounded-2xl bg-amber-500 px-6 py-4 font-black text-slate-950 shadow-lg shadow-amber-950/20 transition hover:bg-amber-400"
-                    >
-                      Edit Material
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedMaterial(null);
-                        setIsEditing(false);
-                      }}
-                      className="rounded-2xl border border-slate-700 bg-slate-800 px-6 py-4 font-black text-white transition hover:border-amber-400/40 hover:bg-slate-700"
-                    >
-                      Close
-                    </button>
 
                   </div>
 
-                </>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
-              )}
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
 
-            </div>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        Material Name
+                      </p>
+
+                      <p className="mt-2 text-lg font-black text-white">
+                        {selectedMaterial.name}
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        Material Group
+                      </p>
+
+                      <p className="mt-2 text-lg font-black text-amber-300">
+                        {getMaterialGroup(
+                          selectedMaterial.name
+                        )}
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        Unit
+                      </p>
+
+                      <p className="mt-2 text-lg font-black text-white">
+                        {selectedMaterial.unit ||
+                          "Not set"}
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        Current Quantity
+                      </p>
+
+                      <p className="mt-2 text-lg font-black text-amber-300">
+                        {formatNumber(
+                          selectedMaterial.quantity
+                        )}{" "}
+                        {selectedMaterial.unit ||
+                          ""}
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        Unit Cost
+                      </p>
+
+                      <p className="mt-2 text-lg font-black text-white">
+                        {formatCurrency(
+                          selectedMaterial.unit_cost
+                        )}
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        Reorder Level
+                      </p>
+
+                      <p className="mt-2 text-lg font-black text-white">
+                        {formatNumber(
+                          selectedMaterial.reorder_level
+                        )}{" "}
+                        {selectedMaterial.unit ||
+                          ""}
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        Material ID
+                      </p>
+
+                      <p className="mt-2 break-all font-mono text-sm font-bold text-amber-300">
+                        {selectedMaterial.id}
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        Date Added
+                      </p>
+
+                      <p className="mt-2 text-sm font-bold leading-6 text-white">
+                        {formatDate(
+                          selectedMaterial.created_at
+                        )}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* SYSTEM REFERENCE */}
+
+                <div className="mt-8 rounded-3xl border border-amber-400/10 bg-amber-500/5 p-6">
+
+                  <div className="flex items-start gap-4">
+
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 text-xl">
+                      🗃️
+                    </div>
+
+                    <div>
+
+                      <p className="text-xs font-black uppercase tracking-wider text-amber-300">
+                        ERP System Reference
+                      </p>
+
+                      <p className="mt-2 break-all font-mono text-sm text-slate-300">
+                        Inventory ID:{" "}
+                        {selectedMaterial.id}
+                      </p>
+
+                      <p className="mt-2 text-xs leading-5 text-slate-600">
+                        This identifier references the material record stored in the ERP inventory database.
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* FOOTER */}
+
+                <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-800 pt-6 sm:flex-row sm:items-center sm:justify-between">
+
+                  <button
+                    type="button"
+                    onClick={startEditing}
+                    className="rounded-2xl bg-amber-500 px-7 py-3.5 font-black text-slate-950 shadow-lg shadow-amber-950/20 transition hover:-translate-y-0.5 hover:bg-amber-400 active:scale-95"
+                  >
+                    ✏️ Edit Material
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={closeMaterial}
+                    className="rounded-2xl border border-slate-700 bg-slate-800 px-7 py-3.5 font-black text-white transition hover:-translate-y-0.5 hover:border-slate-500 hover:bg-slate-700 active:scale-95"
+                  >
+                    Close
+                  </button>
+
+                </div>
+
+              </div>
+
+            )}
 
           </div>
 

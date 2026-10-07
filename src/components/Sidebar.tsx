@@ -8,6 +8,7 @@ import {
   useRouter,
 } from "next/navigation";
 
+import { useBranch } from "@/app/context/BranchContext";
 import { supabase } from "@/lib/supabase";
 
 import {
@@ -26,6 +27,10 @@ import {
   ShieldCheck,
   AlertTriangle,
   Loader2,
+  Building2,
+  ChevronDown,
+  Check,
+  Globe2,
 } from "lucide-react";
 
 const menuByRole = {
@@ -166,6 +171,19 @@ export default function Sidebar({
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  const {
+  branches,
+  currentBranch,
+  isAllBranches,
+  canAccessAllBranches,
+  setCurrentBranch,
+  selectAllBranches,
+  loading: branchLoading,
+} = useBranch();
+
+const [branchMenuOpen, setBranchMenuOpen] =
+  useState(false);
+
   useEffect(() => {
     setRole(localStorage.getItem("role"));
   }, []);
@@ -286,48 +304,223 @@ export default function Sidebar({
 
           </div>
 
-          {/* =========================
-              USER CARD
-          ========================== */}
+{/* =========================
+    BRANCH SELECTOR
+========================= */}
 
-          <div className="p-5">
+<div className="p-5">
+  <div className="relative">
 
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0d1838] p-4 shadow-lg">
+    <button
+      type="button"
+      disabled={branchLoading}
+      onClick={() =>
+        setBranchMenuOpen(!branchMenuOpen)
+      }
+      className="
+        flex w-full items-center
+        justify-between
+        gap-3
+        rounded-2xl
+        border border-white/[0.06]
+        bg-[#0d1838]
+        p-4
+        text-left
+        shadow-lg
+        transition-all
+        hover:border-yellow-400/30
+        hover:bg-[#101d40]
+        disabled:cursor-not-allowed
+        disabled:opacity-60
+      "
+    >
+      <div className="flex min-w-0 items-center gap-3">
 
-              <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-yellow-500/5 blur-2xl" />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-yellow-400/10 text-yellow-400">
+          {isAllBranches ? (
+            <Globe2 size={19} />
+          ) : (
+            <Building2 size={19} />
+          )}
+        </div>
 
-              <div className="relative flex items-center gap-4">
+        <div className="min-w-0">
 
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-yellow-400/20 bg-gradient-to-br from-yellow-400 to-amber-600 font-black text-black shadow-lg shadow-yellow-950/20">
-                  A
-                </div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-gray-500">
+            Current Branch
+          </p>
 
-                <div className="min-w-0">
+          <p className="truncate text-sm font-black text-white">
+            {branchLoading
+              ? "Loading..."
+              : isAllBranches
+              ? "All Branches"
+              : currentBranch?.branch_name ||
+                "Select Branch"}
+          </p>
 
-                  <div className="flex items-center gap-2">
+        </div>
+      </div>
 
-                    <p className="truncate font-bold text-white">
-                      CEO Admin
-                    </p>
+      <ChevronDown
+        size={18}
+        className={`shrink-0 text-gray-500 transition-transform ${
+          branchMenuOpen
+            ? "rotate-180 text-yellow-400"
+            : ""
+        }`}
+      />
+    </button>
 
-                    <ShieldCheck
-                      size={15}
-                      className="shrink-0 text-emerald-400"
-                    />
+    {branchMenuOpen && !branchLoading && (
+      <>
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() =>
+            setBranchMenuOpen(false)
+          }
+        />
+
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-white/10 bg-[#0b1428] shadow-2xl">
+
+          <div className="border-b border-white/[0.06] bg-[#071028] px-4 py-4">
+
+            <p className="text-sm font-black text-white">
+              Select Branch
+            </p>
+
+            <p className="mt-1 text-[10px] text-gray-500">
+              Choose your working branch
+            </p>
+
+          </div>
+
+          <div className="max-h-[300px] overflow-y-auto p-2">
+
+            {branches.map((branch) => {
+
+              const selected =
+                !isAllBranches &&
+                currentBranch?.id === branch.id;
+
+              return (
+                <button
+                  key={branch.id}
+                  type="button"
+                  onClick={() => {
+                    setCurrentBranch(branch.id);
+                    setBranchMenuOpen(false);
+                  }}
+                  className={`
+                    flex w-full items-center justify-between
+                    rounded-xl px-3 py-3 text-left transition-all
+                    ${
+                      selected
+                        ? "bg-yellow-400/10 text-white"
+                        : "text-gray-300 hover:bg-white/[0.05] hover:text-white"
+                    }
+                  `}
+                >
+
+                  <div className="flex items-center gap-3">
+
+                    <div
+                      className={`
+                        flex h-9 w-9 items-center justify-center rounded-xl
+                        ${
+                          selected
+                            ? "bg-yellow-400 text-black"
+                            : "bg-white/[0.05] text-gray-500"
+                        }
+                      `}
+                    >
+                      <Building2 size={16} />
+                    </div>
+
+                    <div>
+
+                      <p className="text-sm font-bold">
+                        {branch.branch_name}
+                      </p>
+
+                      <p className="text-[9px] font-semibold uppercase tracking-wider text-gray-500">
+                        {branch.branch_code}
+                      </p>
+
+                    </div>
 
                   </div>
 
-                  <p className="mt-0.5 text-sm text-gray-400">
-                    Administrator
-                  </p>
+                  {selected && (
+                    <Check
+                      size={17}
+                      className="text-emerald-400"
+                    />
+                  )}
 
-                </div>
+                </button>
+              );
+            })}
 
-              </div>
+            {canAccessAllBranches && (
+              <>
+                <div className="my-2 border-t border-white/[0.06]" />
 
-            </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectAllBranches();
+                    setBranchMenuOpen(false);
+                  }}
+                  className={`
+                    flex w-full items-center justify-between
+                    rounded-xl px-3 py-3 text-left transition-all
+                    ${
+                      isAllBranches
+                        ? "bg-blue-500/10 text-white"
+                        : "text-gray-300 hover:bg-white/[0.05]"
+                    }
+                  `}
+                >
+
+                  <div className="flex items-center gap-3">
+
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.05] text-gray-500">
+                      <Globe2 size={16} />
+                    </div>
+
+                    <div>
+
+                      <p className="text-sm font-bold">
+                        All Branches
+                      </p>
+
+                      <p className="text-[9px] text-gray-500">
+                        Company-wide view
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                  {isAllBranches && (
+                    <Check
+                      size={17}
+                      className="text-emerald-400"
+                    />
+                  )}
+
+                </button>
+              </>
+            )}
 
           </div>
+        </div>
+      </>
+    )}
+
+  </div>
+</div>
 
           {/* =========================
               MENU

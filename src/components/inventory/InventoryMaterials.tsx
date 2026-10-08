@@ -18,26 +18,47 @@ interface InventoryMaterialsProps {
 ===================================================== */
 
 const materialImages: Record<string, string> = {
-  // Production Ingredients
+  // =====================================================
+  // PRODUCTION INGREDIENTS
+  // =====================================================
+
   Flour: "/inventory/flour.jpg",
   Sugar: "/inventory/sugar.jpg",
   Butter: "/inventory/butter.jpg",
   Yeast: "/inventory/yeast.jpg",
   "Groundnut Oil": "/inventory/groundnut-oil.jpg",
+
   "Iruka Recipe": "/inventory/iruka-recipe.jpg",
   "White Recipe": "/inventory/white-recipe.jpg",
   "Fruits Recipe": "/inventory/fruits-recipe.jpg",
 
-  // Packaging Materials
+  // =====================================================
+  // PACKAGING MATERIALS
+  // =====================================================
+
   Tape: "/inventory/tape.jpg",
+  Twist: "/inventory/twist.jpg",
+
   "Small Iruka Nylon": "/inventory/small-iruka-nylon.jpg",
   "Small Rosy Nylon": "/inventory/small-rosy-nylon.jpg",
+
+  "Medium Iruka Nylon": "/inventory/medium-iruka.jpg",
   "Medium Rosy Nylon": "/inventory/medium-rosy-nylon.jpg",
+
   "Big Smart Nylon": "/inventory/big-smart-nylon.jpg",
+
+  "Classic Iruka Nylon": "/inventory/classic-iruka.jpg",
+  "Classic Fruits Nylon": "/inventory/classic-fruits.jpg",
+
+  "Jumbo Iruka Nylon": "/inventory/jumbo-iruka.jpg",
   "Jumbo Fruits Nylon": "/inventory/jumbo-fruits-nylon.jpg",
+
   "Big Brother Family Nylon": "/inventory/big-brother-nylon.jpg",
 
-  // Bakery Additives
+  // =====================================================
+  // BAKERY ADDITIVES
+  // =====================================================
+
   Brown: "/inventory/brown.jpg",
   Resins: "/inventory/resins.jpg",
   Flavour: "/inventory/flavour.jpg",
